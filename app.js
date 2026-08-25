@@ -443,7 +443,7 @@ const EVENTS = [
   {
     id: 'special_offering', icon: '💌', title: '한 성도의 특별한 헌신',
     body: '오래 섬겨온 한 성도가 예배당 보수를 위해 특별한 헌신을 하고 싶다고 조용히 찾아왔습니다.',
-    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 8,
+    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오래 섬겨온" 표현과 맞도록 최소 1년 이상 지난 뒤에만
     choices: [
       { label: '감사히 받아 예배당 보수에 전액 사용한다',
         apply: (s) => { s.fund += 3000000; s.faith = clamp(s.faith - 1, 0, 100); return '든든한 헌신이었지만, 갑작스러운 집행에 절차상 잡음이 조금 있었습니다.'; } },
@@ -561,7 +561,7 @@ const EVENTS = [
   {
     id: 'wedding_request', icon: '💒', title: '성도 자녀의 결혼식 요청',
     body: '오래 섬긴 성도의 자녀가 우리 예배당에서 결혼식을 올리고 싶다고 요청해왔습니다.',
-    available: (s) => s.members >= EVENT_TIER_SPROUT,
+    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오래 섬긴" 표현과 맞도록 최소 1년 이상 지난 뒤에만
     choices: [
       { label: '예배당을 아름답게 단장해 축하한다',
         apply: (s) => { s.fund -= 200000; s.faith = clamp(s.faith + 2, 0, 100); s.reputation = clamp(s.reputation + 2, 0, 100); return '아름답게 꾸며진 예배당에서 뜻깊은 예식이 열렸습니다.'; } },
@@ -576,7 +576,7 @@ const EVENTS = [
   {
     id: 'bereavement_care', icon: '🕊️', title: '상을 당한 성도 가정',
     body: '오랫동안 함께한 성도 가정이 갑작스러운 상을 당했습니다.',
-    available: (s) => s.members >= EVENT_TIER_SPROUT,
+    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오랫동안 함께한" 표현과 맞도록 최소 1년 이상 지난 뒤에만
     choices: [
       { label: '목회자와 성도들이 삼일 내내 함께한다',
         apply: (s) => { s.fund -= 150000; s.faith = clamp(s.faith + 3, 0, 100); return '함께한 삼일이 가정에 큰 위로가 되었습니다.'; } },
