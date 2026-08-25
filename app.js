@@ -269,7 +269,7 @@ let campaignHistoryShown = CAMPAIGN_HISTORY_PAGE;
 const MEMBER_STATUS = ['원입교인', '원입교인', '학습교인', '세례교인', '세례교인', '세례교인'];
 const MEMBER_GIFTS = ['찬양', '봉사', '가르침', '섬김', '기도', '전도', '나눔', '환대', '중보기도', '심방'];
 
-function generalMemberProfile(i) {
+function generalMemberProfile(i, churchAgeWeeks) {
   const rnd = seededRng(hashStr('genmember:' + i));
   const gender = rnd() < 0.5 ? 'M' : 'F';
   const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
@@ -277,7 +277,11 @@ function generalMemberProfile(i) {
   const family = age < 19 ? '미성년자' : CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
   const status = age < 15 ? '유아세례교인' : MEMBER_STATUS[Math.floor(rnd() * MEMBER_STATUS.length)];
   const gift = MEMBER_GIFTS[Math.floor(rnd() * MEMBER_GIFTS.length)];
-  const joinYears = Math.min(age, 1 + Math.floor(rnd() * 20));
+  /* 등록년차는 나이뿐 아니라 "교회 자체가 존재해온 기간"도 넘을 수 없다 — 개척 1년 미만인
+     교회에 등록 11년차 성도가 있는 건 시간상 불가능하다(오너가 발견한 실제 오류). */
+  const churchAgeYears = Math.max(0, Math.floor((churchAgeWeeks || 0) / WEEKS_PER_MONTH / 12));
+  const maxJoinYears = Math.min(age, churchAgeYears);
+  const joinYears = maxJoinYears > 0 ? 1 + Math.floor(rnd() * maxJoinYears) : 0;
   return { name, gender, age, family, status, gift, joinYears };
 }
 
@@ -421,6 +425,64 @@ const DEPARTMENTS = {
   },
 };
 
+/* 목회방향 세팅(오너 지시) — 5개 항목 × 선택지 4개, 한번 고르면 비용 없이 매주 계속
+   적용되는 지속 효과다("선택한 목회 방향에 따라 교회 성장이 이루어져 가도록"). 사역·건물처럼
+   돈으로 사는 게 아니라 "이 교회를 어떤 색깔로 이끌 것인가"를 정하는 것이라, 항목마다 오르는
+   값과 내리는 값을 함께 둬서 정답이 없게 했다(다른 4택 시스템들과 같은 설계 원칙). 항목은
+   서로 독립적이라 5개를 자유롭게 조합할 수 있다. */
+const PASTORAL_DIRECTIONS = {
+  preaching: {
+    name: '설교 방향', icon: 'micon_m_bible.png',
+    desc: '주일 강단에서 무엇을 가장 우선할 것인가',
+    options: {
+      expository: { name: '강해설교', desc: '본문을 깊이 풀어 가르칩니다. 기존 성도의 신앙이 깊어지지만, 새가족에겐 다소 어렵게 느껴질 수 있습니다.', effect: { faithPerWeek: 0.3, visitorPerWeek: -0.1 } },
+      topical: { name: '주제설교', desc: '삶에 적용되는 주제를 다룹니다. 무난하고 균형 잡힌 접근입니다.', effect: { faithPerWeek: 0.15, reputationPerWeek: 0.1 } },
+      evangelistic: { name: '전도설교', desc: '복음을 쉽고 분명하게 전합니다. 새가족에게 좋지만, 기존 성도에게는 다소 얕게 느껴질 수 있습니다.', effect: { visitorPerWeek: 0.25, faithPerWeek: -0.1 } },
+      pastoral: { name: '목양설교', desc: '위로와 치유를 강조합니다. 정착에 도움이 되지만 도전과 결단은 약해질 수 있습니다.', effect: { retentionBonus: 0.015, faithPerWeek: -0.05 } },
+    },
+  },
+  worship: {
+    name: '예배 스타일', icon: 'micon_ui_sparkle.png',
+    desc: '예배 순서와 분위기를 어떻게 꾸릴 것인가',
+    options: {
+      traditional: { name: '전통적 예배', desc: '경건하고 안정적인 순서를 지킵니다. 깊이는 있지만 새로운 이들에게는 다소 낯설 수 있습니다.', effect: { faithPerWeek: 0.2, visitorPerWeek: -0.15 } },
+      contemporary: { name: '현대적 예배', desc: '찬양과 미디어를 적극 활용합니다. 젊은 세대 유입에 좋지만 신앙의 깊이는 상대적으로 약해질 수 있습니다.', effect: { visitorPerWeek: 0.2, faithPerWeek: -0.1 } },
+      seeker: { name: '열린예배', desc: '초신자가 편하게 느끼도록 문턱을 낮춥니다. 유입엔 강하지만 정착률은 다소 아쉬울 수 있습니다.', effect: { visitorPerWeek: 0.3, retentionBonus: -0.01 } },
+      liturgical: { name: '절기 중심 예배', desc: '교회력과 절기를 따라 예배합니다. 신앙의 깊이는 더하지만 지역에는 다소 보수적으로 비칠 수 있습니다.', effect: { faithPerWeek: 0.25, reputationPerWeek: -0.1 } },
+    },
+  },
+  growth: {
+    name: '성장 전략', icon: 'micon_ui_people.png',
+    desc: '교회의 에너지를 어디에 집중할 것인가',
+    options: {
+      discipleship: { name: '내실 다지기', desc: '양육과 훈련에 집중합니다. 정착률은 오르지만 새가족 유입 속도는 더딜 수 있습니다.', effect: { retentionBonus: 0.02, visitorPerWeek: -0.1 } },
+      community: { name: '지역사회 섬김', desc: '이웃을 섬기는 데 힘씁니다. 지역 신뢰가 크게 오르지만 내부 양육은 상대적으로 약해질 수 있습니다.', effect: { reputationPerWeek: 0.3, faithPerWeek: -0.1 } },
+      nextgen: { name: '다음세대 집중', desc: '교육과 다음세대에 자원을 집중합니다. 정착에 좋지만 대외 인지도 확대는 더딜 수 있습니다.', effect: { retentionBonus: 0.015, reputationPerWeek: -0.1 } },
+      missional: { name: '개척·선교 지향', desc: '밖으로 파송하는 데 힘씁니다. 지역 신뢰는 오르지만 내부 결속은 다소 느슨해질 수 있습니다.', effect: { reputationPerWeek: 0.2, retentionBonus: -0.01 } },
+    },
+  },
+  finance: {
+    name: '재정 운용 철학', icon: 'micon_ui_floppy.png',
+    desc: '교회 재정을 어떤 태도로 다룰 것인가',
+    options: {
+      frugal: { name: '검소한 운영', desc: '아끼고 절제하며 운영합니다. 신뢰는 쌓이지만 때로 인색하게 비칠 수 있습니다.', effect: { retentionBonus: 0.01, reputationPerWeek: -0.05 } },
+      balanced: { name: '균형 투자', desc: '무리하지 않는 선에서 고르게 씁니다. 모든 면에서 무난한 소폭의 도움이 됩니다.', effect: { faithPerWeek: 0.05, reputationPerWeek: 0.05, retentionBonus: 0.005 } },
+      aggressive: { name: '적극 투자', desc: '과감하게 투자해 눈에 띄는 변화를 만듭니다. 효과는 크지만 성도들이 다소 부담을 느낄 수 있습니다.', effect: { faithPerWeek: 0.2, reputationPerWeek: 0.2, retentionBonus: -0.015 } },
+      generous: { name: '나눔 중심', desc: '구제와 나눔에 우선순위를 둡니다. 지역 평판은 크게 오르지만 내적 신앙 강화는 더딜 수 있습니다.', effect: { reputationPerWeek: 0.3, faithPerWeek: -0.1 } },
+    },
+  },
+  leadership: {
+    name: '리더십 스타일', icon: 'micon_o_elder.png',
+    desc: '교회를 어떤 방식으로 이끌어갈 것인가',
+    options: {
+      pastor_centered: { name: '담임 중심 리더십', desc: '담임목사가 방향을 뚜렷이 제시합니다. 신앙 지도는 분명하지만 성도 참여감은 다소 약해질 수 있습니다.', effect: { faithPerWeek: 0.15, retentionBonus: -0.01 } },
+      session_centered: { name: '당회 중심', desc: '당회의 협의를 중시합니다. 안정적이고 균형 잡힌 운영입니다.', effect: { retentionBonus: 0.01, reputationPerWeek: 0.05 } },
+      gift_based: { name: '은사 중심 팀사역', desc: '각자의 은사에 맡겨 다양하게 사역합니다. 외부에는 매력적이지만 통일감은 약해질 수 있습니다.', effect: { visitorPerWeek: 0.15, faithPerWeek: -0.05 } },
+      congregational: { name: '성도 참여형', desc: '성도들이 함께 결정하고 참여합니다. 정착과 소속감은 강해지지만 의사결정과 확장은 더딜 수 있습니다.', effect: { retentionBonus: 0.02, visitorPerWeek: -0.1 } },
+    },
+  },
+};
+
 const CAMPAIGNS = {
   revival: {
     name: '부흥회', icon: 'micon_c_flame.png',
@@ -535,7 +597,7 @@ const EVENTS = [
   {
     id: 'special_offering', icon: 'micon_ev_letter.png', title: '한 성도의 특별한 헌신',
     body: '오래 섬겨온 한 성도가 예배당 보수를 위해 특별한 헌신을 하고 싶다고 조용히 찾아왔습니다.',
-    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오래 섬겨온" 표현과 맞도록 최소 1년 이상 지난 뒤에만
+    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 260, // "오래 섬겨온" 표현과 맞도록 최소 5년 이상 지난 뒤에만(게임 속도가 빨라져 1년으로는 여전히 일러 보인다는 재지적으로 상향)
     choices: [
       { label: '감사히 받아 예배당 보수에 전액 사용한다',
         apply: (s) => { s.fund += 3000000; s.faith = clamp(s.faith - 1, 0, 100); return '든든한 헌신이었지만, 갑작스러운 집행에 절차상 잡음이 조금 있었습니다.'; } },
@@ -593,7 +655,7 @@ const EVENTS = [
   {
     id: 'elder_wisdom', icon: 'micon_ev_candle.png', title: '오래 섬겨온 어른의 조언',
     body: '오랫동안 교회를 섬겨온 한 어르신이 조용히 다가와 기도모임을 하나 더 열어보면 어떻겠냐고 권합니다.',
-    available: (s) => s.members >= EVENT_TIER_FRUIT && s.week >= 30,
+    available: (s) => s.members >= EVENT_TIER_FRUIT && s.week >= 260, // "오래 섬겨온"·"오랫동안" 표현과 맞도록 5년 이상으로 상향(다른 유사 이벤트와 통일)
     choices: [
       { label: '조언대로 새 기도모임을 열고 적극 알린다',
         apply: (s) => { s.fund -= 50000; s.faith = clamp(s.faith + 3, 0, 100); return '적극적으로 알린 새 기도모임에 많은 이들이 참여했습니다.'; } },
@@ -653,7 +715,7 @@ const EVENTS = [
   {
     id: 'wedding_request', icon: 'micon_ev_wedding.png', title: '성도 자녀의 결혼식 요청',
     body: '오래 섬긴 성도의 자녀가 우리 예배당에서 결혼식을 올리고 싶다고 요청해왔습니다.',
-    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오래 섬긴" 표현과 맞도록 최소 1년 이상 지난 뒤에만
+    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 260, // "오래 섬긴" 표현과 맞도록 최소 5년 이상 지난 뒤에만(게임 속도가 빨라져 1년으로는 여전히 일러 보인다는 재지적으로 상향)
     choices: [
       { label: '예배당을 아름답게 단장해 축하한다',
         apply: (s) => { s.fund -= 200000; s.faith = clamp(s.faith + 2, 0, 100); s.reputation = clamp(s.reputation + 2, 0, 100); return '아름답게 꾸며진 예배당에서 뜻깊은 예식이 열렸습니다.'; } },
@@ -668,7 +730,7 @@ const EVENTS = [
   {
     id: 'bereavement_care', icon: 'micon_ev_dove.png', title: '상을 당한 성도 가정',
     body: '오랫동안 함께한 성도 가정이 갑작스러운 상을 당했습니다.',
-    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오랫동안 함께한" 표현과 맞도록 최소 1년 이상 지난 뒤에만
+    available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 260, // "오랫동안 함께한" 표현과 맞도록 최소 5년 이상 지난 뒤에만(게임 속도가 빨라져 1년으로는 여전히 일러 보인다는 재지적으로 상향)
     choices: [
       { label: '목회자와 성도들이 삼일 내내 함께한다',
         apply: (s) => { s.fund -= 150000; s.faith = clamp(s.faith + 3, 0, 100); return '함께한 삼일이 가정에 큰 위로가 되었습니다.'; } },
@@ -728,7 +790,7 @@ const EVENTS = [
   {
     id: 'generous_legacy', icon: 'micon_s_scroll.png', title: '은퇴 성도의 유산 기부',
     body: '은퇴 후 이 교회에 정착해 신앙생활을 해온 한 성도님이, 평생 모은 재산의 일부를 교회에 남기고 싶다고 조용히 찾아오셨습니다.',
-    available: (s) => s.members >= EVENT_TIER_TREE && s.week >= 60,
+    available: (s) => s.members >= EVENT_TIER_TREE && s.week >= 260, // "정착해 신앙생활을 해온" 표현과 맞도록 5년 이상으로 상향(다른 유사 이벤트와 통일)
     choices: [
       { label: '감사히 받아 다음세대를 위한 기금으로 삼는다',
         apply: (s) => { s.fund += 5000000; s.faith = clamp(s.faith + 2, 0, 100); return '귀한 유산이 다음세대를 위한 밑거름이 되었습니다.'; } },
@@ -944,6 +1006,7 @@ function newGame(name) {
     pastorSalaryMult: 1,
     candidateSeed: Math.floor(Math.random() * 1000000000), // 이 판에서 부교역자 후보들이 어떤 사람으로 나올지 결정하는 무작위 시드
     campaignHistory: [],
+    pastoralDirections: {}, // { 항목키: 선택한 옵션키 } — 미설정 항목은 효과 없음
   };
 }
 
@@ -972,6 +1035,7 @@ function migrateSave(s) {
   if (typeof s.pastorSalaryMult !== 'number') s.pastorSalaryMult = 1;
   if (typeof s.candidateSeed !== 'number') s.candidateSeed = Math.floor(Math.random() * 1000000000); // 구버전 저장 호환 — 이 판만의 시드를 새로 부여
   if (!Array.isArray(s.campaignHistory)) s.campaignHistory = [];
+  if (!s.pastoralDirections || typeof s.pastoralDirections !== 'object') s.pastoralDirections = {};
   for (const k of ['elder', 'deacon', 'exhorter']) {
     if (typeof s.officers[k] === 'number') {
       const n = s.officers[k];
@@ -1070,6 +1134,20 @@ function computeModifiers(s) {
   const psm = s.pastorSalaryMult || 1;
   if (psm < 0.7) mod.faithPerWeek -= (0.7 - psm) * 3;
   else if (psm > 1.0) mod.faithPerWeek += Math.min(psm - 1.0, 0.5) * 0.4;
+
+  if (s.pastoralDirections) {
+    for (const catKey in PASTORAL_DIRECTIONS) {
+      const chosenKey = s.pastoralDirections[catKey];
+      if (!chosenKey) continue;
+      const opt = PASTORAL_DIRECTIONS[catKey].options[chosenKey];
+      if (!opt) continue;
+      const e = opt.effect;
+      mod.faithPerWeek += e.faithPerWeek || 0;
+      mod.reputationPerWeek += e.reputationPerWeek || 0;
+      mod.retentionBonus += e.retentionBonus || 0;
+      mod.visitorPerWeek += e.visitorPerWeek || 0;
+    }
+  }
 
   return mod;
 }
@@ -1625,6 +1703,7 @@ function render() {
   if (currentTab === 'buildings') content.appendChild(renderBuildings());
   if (currentTab === 'ministries') content.appendChild(renderMinistries());
   if (currentTab === 'staff') content.appendChild(renderStaff());
+  if (currentTab === 'directions') content.appendChild(renderDirections());
   if (currentTab === 'log') content.appendChild(renderLog());
 }
 
@@ -1638,6 +1717,20 @@ function el(tag, cls, html) {
   if (cls) e.className = cls;
   if (html != null) e.innerHTML = html;
   return e;
+}
+
+/* 접고 펼치기(오너 지시: "교적부는 평소 리스트가 접혀 있다가 눌러야 펼쳐지도록, 다른
+   항목들도 적용 가능한 곳엔 적용") — 펼침 상태는 세션 동안만 유지하는 순수 UI 상태라
+   저장 데이터에는 없다(탭을 벗어났다 돌아오면 다시 기본값으로). 헤더를 클릭하면 그
+   섹션만 다시 그려 넣는다. */
+const collapsedSections = {};
+
+function collapsibleHeader(key, title, defaultCollapsed) {
+  if (!(key in collapsedSections)) collapsedSections[key] = defaultCollapsed;
+  const collapsed = collapsedSections[key];
+  const header = el('div', 'section-title collapsible-header', `<span class="collapse-arrow">${collapsed ? '▸' : '▾'}</span> ${title}`);
+  header.addEventListener('click', () => { collapsedSections[key] = !collapsedSections[key]; render(); });
+  return header;
 }
 
 function renderDashboard() {
@@ -1705,9 +1798,9 @@ function renderCampaigns() {
   wrap.querySelectorAll('[data-campaign]').forEach((b) => b.addEventListener('click', () => actionCampaign(b.dataset.campaign)));
 
   if (state.campaignHistory && state.campaignHistory.length) {
-    wrap.appendChild(el('div', 'section-title', `역대 행사 보고서 (${state.campaignHistory.length}건) — 다음 행사를 정할 때 참고하세요`));
+    wrap.appendChild(collapsibleHeader('campaignHistory', `역대 행사 보고서 (${state.campaignHistory.length}건) — 다음 행사를 정할 때 참고하세요`, true));
     const hist = state.campaignHistory;
-    const shown = Math.min(campaignHistoryShown, hist.length);
+    const shown = collapsedSections.campaignHistory ? 0 : Math.min(campaignHistoryShown, hist.length);
     for (let i = 0; i < shown; i++) {
       const h = hist[i];
       const deltas = [
@@ -1731,7 +1824,7 @@ function renderCampaigns() {
         </div>`;
       wrap.appendChild(card);
     }
-    if (shown < hist.length) {
+    if (!collapsedSections.campaignHistory && shown < hist.length) {
       const remain = hist.length - shown;
       const moreBtn = el('button', 'btn btn-outline btn-small', `${fmt(Math.min(CAMPAIGN_HISTORY_PAGE, remain))}건 더 보기 (${fmt(remain)}건 남음)`);
       moreBtn.style.width = '100%';
@@ -1810,6 +1903,53 @@ function renderDashboardSummary(summary) {
   const box = document.getElementById('dashSummary');
   if (!box) return;
   box.innerHTML = buildSummaryRowsHtml(summary);
+}
+
+function actionSetDirection(catKey, optionKey) {
+  if (!state.pastoralDirections) state.pastoralDirections = {};
+  state.pastoralDirections[catKey] = optionKey;
+  const def = PASTORAL_DIRECTIONS[catKey];
+  addLog(`목회방향 '${def.name}'을(를) '${def.options[optionKey].name}'(으)로 정했습니다.`);
+  saveGame();
+  render();
+}
+
+function renderDirections() {
+  const wrap = el('div');
+  wrap.appendChild(el('div', 'section-title', '목회방향 — 이 교회를 어떤 색깔로 이끌어갈지 정합니다'));
+  wrap.appendChild(el('div', 'card-sub', '항목마다 하나씩 고르면 비용 없이 매주 계속 적용됩니다. 언제든 다시 바꿀 수 있고, 모든 선택지는 오르는 점과 내리는 점을 함께 가지고 있어 정답은 없습니다.')).style.margin = '0 4px 10px';
+
+  for (const catKey in PASTORAL_DIRECTIONS) {
+    const cat = PASTORAL_DIRECTIONS[catKey];
+    const chosenKey = (state.pastoralDirections || {})[catKey];
+    const chosenName = chosenKey ? cat.options[chosenKey].name : '미설정';
+    wrap.appendChild(collapsibleHeader(`dir_${catKey}`, `<img class="inline-icon" src="assets/${cat.icon}" alt=""> ${cat.name} — 현재: ${chosenName}`, true));
+    if (collapsedSections[`dir_${catKey}`]) continue;
+
+    const introCard = el('div', 'card');
+    introCard.innerHTML = `<div class="card-sub">${cat.desc}</div>`;
+    wrap.appendChild(introCard);
+
+    for (const optKey in cat.options) {
+      const opt = cat.options[optKey];
+      const selected = optKey === chosenKey;
+      const card = el('div', 'card');
+      card.innerHTML = `
+        <div class="card-row">
+          <div class="card-main">
+            <div class="card-title">${opt.name} ${selected ? '<span class="card-level">선택됨</span>' : ''}</div>
+            <div class="card-sub">${opt.desc}</div>
+          </div>
+          <div class="card-action">
+            <button class="btn ${selected ? 'btn-toggle-on' : 'btn-outline'} btn-small" ${selected ? 'disabled' : ''} data-dir-cat="${catKey}" data-dir-opt="${optKey}">${selected ? '선택 중' : '선택'}</button>
+          </div>
+        </div>`;
+      wrap.appendChild(card);
+    }
+  }
+  wrap.querySelectorAll('[data-dir-cat]').forEach((b) => b.addEventListener('click', () => actionSetDirection(b.dataset.dirCat, b.dataset.dirOpt)));
+
+  return wrap;
 }
 
 function renderBuildings() {
@@ -1897,7 +2037,8 @@ function genderLabel(g) { return g === 'F' ? '여성' : '남성'; }
 
 function renderRoster() {
   const wrap = el('div');
-  wrap.appendChild(el('div', 'section-title', '교적부 — 담임목회자·부교역자·직분자·성도 명단'));
+  wrap.appendChild(collapsibleHeader('roster', '교적부 — 담임목회자·부교역자·직분자·성도 명단', true));
+  if (collapsedSections.roster) return wrap;
 
   const pastorCard = el('div', 'card');
   const pastorWeekly = pastorWeeklySalary(state);
@@ -1974,7 +2115,7 @@ function renderRoster() {
     wrap.appendChild(el('div', 'section-title', `일반 성도 (${fmt(generalCount)}명)`));
     const shown = Math.min(generalMembersShown, generalCount);
     for (let i = 0; i < shown; i++) {
-      const p = generalMemberProfile(i);
+      const p = generalMemberProfile(i, Math.max(0, state.week - 1));
       const card = el('div', 'card');
       card.innerHTML = `
         <div class="card-row">
@@ -2140,7 +2281,8 @@ function renderLog() {
     importInput.value = '';
   });
 
-  wrap.appendChild(el('div', 'section-title', '지난 발자취'));
+  wrap.appendChild(collapsibleHeader('log', '지난 발자취', false));
+  if (collapsedSections.log) return wrap;
   if (!state.logs.length) {
     wrap.appendChild(el('div', 'log-empty', '아직 기록이 없습니다. 다음 주로 넘어가 보세요.'));
     return wrap;
@@ -2305,7 +2447,7 @@ function updateAutoPlayButton() {
   if (!btn) return;
   const mult = currentSpeedMultiplier();
   const boostSuffix = mult > 1 ? ` · ${mult}배속(${Math.max(0, Math.ceil((state.speedBoostUntil - Date.now()) / 60000))}분 남음)` : '';
-  btn.textContent = (autoPlayOn ? '⏸ 시간이 흐르는 중' : '▶ 일시정지됨 (탭해서 계속)') + boostSuffix;
+  btn.textContent = (autoPlayOn ? '⏸ 은혜가 흐르는 중' : '▶ 일시정지됨 (탭해서 계속)') + boostSuffix;
   btn.classList.toggle('btn-primary', autoPlayOn);
   btn.classList.toggle('btn-outline', !autoPlayOn);
   btn.setAttribute('aria-pressed', autoPlayOn ? 'true' : 'false');

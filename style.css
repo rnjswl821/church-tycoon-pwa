@@ -317,6 +317,14 @@ body {
   margin: 14px 4px 8px;
 }
 .section-title:first-child { margin-top: 4px; }
+.collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.collapse-arrow { display: inline-block; width: 10px; color: var(--primary); }
 
 /* Cards */
 .card {
