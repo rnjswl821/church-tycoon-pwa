@@ -157,140 +157,386 @@ def sanctuary(level):
     return im
 
 # ---------------------------------------------------------------- education
-EDU_WALL   = (255, 244, 219, 255)
-EDU_WALLSH = (232, 217, 182, 255)
-EDU_ROOF   = (99, 148, 111, 255)
-EDU_ROOFSH = (73, 116, 85, 255)
-BOOK_RED   = (196, 84, 66, 255)
-BOOK_BLUE  = (86, 120, 168, 255)
+EDU_WALL    = (255, 244, 219, 255)
+EDU_WALLSH  = (232, 217, 182, 255)
+EDU_ROOF    = (99, 148, 111, 255)
+EDU_ROOFSH  = (73, 116, 85, 255)
+EDU_ROOF2   = (74, 128, 158, 255)   # 평지붕 슬래브(2단계+)
+EDU_ROOF2SH = (56, 100, 126, 255)
+BOOK_RED    = (196, 84, 66, 255)
+BOOK_BLUE   = (86, 120, 168, 255)
+PLAY_POLE   = (150, 102, 61, 255)
+PLAY_SEAT   = (196, 84, 66, 255)
+CLOCK_FACE  = (255, 250, 238, 255)
 
-def education(level):
-    body_w = [16, 20, 24, 26, 28][level]
-    body_h = [12, 14, 15, 16, 18][level]
-    roof_h = [7, 8, 9, 9, 10][level]
-    flag_h = [0, 0, 8, 9, 10][level]
-    margin_x, margin_top, margin_bot = 4, 3, 2
-    W = body_w + margin_x * 2
-    H = margin_top + flag_h + roof_h + body_h + margin_bot
-    im = img(W, H)
-    d = ImageDraw.Draw(im)
+def _edu_window(d, wx, wy, size, warm=False):
+    c, sh = (WIN_WARM, GOLD) if warm else (WIN, WIN_SH)
+    d.rectangle([wx - size // 2, wy, wx + size // 2, wy + size], fill=c, outline=INK)
+    d.line([(wx, wy), (wx, wy + size)], fill=sh)
 
-    ground = H - margin_bot
-    cx = W // 2
-    x0, x1 = cx - body_w // 2, cx + body_w // 2
-    body_top = ground - body_h
-
-    outline_rect(d, x0, body_top, x1, ground, EDU_WALL, INK)
-    d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=EDU_WALLSH)
-
-    peak_y = body_top - roof_h
-    half = (x1 - x0) / 2 + 2
-    steps = max(3, body_w // 4)
-    for i in range(steps + 1):
-        t = i / steps
-        y = round(body_top - t * (body_top - peak_y))
-        xw = round(half * (1 - t))
-        d.line([(cx - xw, y), (cx + xw, y)], fill=EDU_ROOF)
-    d.line([(cx, peak_y), (x0 - 2, body_top)], fill=INK)
-    d.line([(cx, peak_y), (x1 + 2, body_top)], fill=INK)
-    d.line([(cx, peak_y), (cx + 2, body_top)], fill=EDU_ROOFSH)
-
-    if flag_h > 0:
-        pole_x = x1 - 3
-        d.line([(pole_x, peak_y), (pole_x, peak_y - flag_h)], fill=WOOD)
-        d.polygon([(pole_x, peak_y - flag_h), (pole_x + 6, peak_y - flag_h + 3), (pole_x, peak_y - flag_h + 5)], fill=BOOK_RED, outline=INK)
-
-    door_h = max(5, int(body_h * 0.55))
-    door_w = max(3, body_w // 5)
+def _edu_door(d, cx, ground, door_h, door_w):
     d.rectangle([cx - door_w // 2, ground - door_h, cx + door_w // 2, ground], fill=DOOR, outline=DOOR_SH)
 
-    nwin = min(3, level + 1)
-    win_y = body_top + int(body_h * 0.20)
-    win_size = max(3, body_w // 9)
-    span = x1 - x0
-    gap = span / (nwin + 1)
-    for i in range(nwin):
-        wx = int(x0 + gap * (i + 1))
-        if abs(wx - cx) < door_w // 2 + 1:
-            continue
-        d.rectangle([wx - win_size // 2, win_y, wx + win_size // 2, win_y + win_size], fill=WIN, outline=INK)
-        d.line([(wx, win_y), (wx, win_y + win_size)], fill=WIN_SH)
+def _edu_swingset(d, x0, ground, h):
+    x1 = x0 + 12
+    top = ground - h
+    d.line([(x0, ground), (x0 + 2, top)], fill=PLAY_POLE)
+    d.line([(x0 + 4, ground), (x0 + 2, top)], fill=PLAY_POLE)
+    d.line([(x1, ground), (x1 + 2, top)], fill=PLAY_POLE)
+    d.line([(x1 + 4, ground), (x1 + 2, top)], fill=PLAY_POLE)
+    d.line([(x0 + 2, top), (x1 + 2, top)], fill=INK)
+    d.line([(x0 + 5, top), (x0 + 4, top + 5)], fill=WOOD)
+    d.point([(x0 + 4, top + 5)], fill=PLAY_SEAT)
+    d.line([(x1 - 1, top), (x1 - 2, top + 5)], fill=WOOD)
+    d.point([(x1 - 2, top + 5)], fill=PLAY_SEAT)
 
-    if level >= 1:
-        # small book sign above the door
-        bw = max(4, door_w + 2)
-        by = ground - door_h - 5
-        d.rectangle([cx - bw // 2, by, cx + bw // 2, by + 3], fill=BOOK_BLUE, outline=INK)
+def _edu_flag(d, pole_x, base_y, flag_h):
+    d.line([(pole_x, base_y), (pole_x, base_y - flag_h)], fill=WOOD)
+    d.polygon([(pole_x, base_y - flag_h), (pole_x + 6, base_y - flag_h + 3), (pole_x, base_y - flag_h + 5)], fill=BOOK_RED, outline=INK)
+
+def education(level):
+    if level == 0:
+        # 0단계: 임시 교실 한 칸 (이동식 트레일러 느낌)
+        body_w, body_h = 14, 9
+        margin_x, margin_top, margin_bot = 4, 3, 2
+        W = body_w + margin_x * 2
+        H = margin_top + 2 + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        cx = W // 2
+        x0, x1 = cx - body_w // 2, cx + body_w // 2
+        body_top = ground - body_h
+        outline_rect(d, x0, body_top, x1, ground, EDU_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=EDU_WALLSH)
+        d.rectangle([x0 - 1, body_top - 2, x1 + 1, body_top], fill=WOOD_SH, outline=INK)
+        _edu_door(d, cx - 2, ground, 6, 3)
+        _edu_window(d, cx + 4, body_top + 2, 3)
+        d.point([(x0 + 2, ground)], fill=INK)
+        d.point([(x1 - 2, ground)], fill=INK)
+        return im
+
+    if level == 1:
+        # 1단계: 종탑 있는 박공지붕 학사
+        body_w, body_h, roof_h, bell_h = 17, 12, 7, 4
+        margin_x, margin_top, margin_bot = 4, 3, 2
+        W = body_w + margin_x * 2
+        H = margin_top + bell_h + roof_h + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        cx = W // 2
+        x0, x1 = cx - body_w // 2, cx + body_w // 2
+        body_top = ground - body_h
+        outline_rect(d, x0, body_top, x1, ground, EDU_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=EDU_WALLSH)
+        peak_y = body_top - roof_h
+        half = (x1 - x0) / 2 + 2
+        steps = max(3, body_w // 4)
+        for i in range(steps + 1):
+            t = i / steps
+            y = round(body_top - t * (body_top - peak_y))
+            xw = round(half * (1 - t))
+            d.line([(cx - xw, y), (cx + xw, y)], fill=EDU_ROOF)
+        d.line([(cx, peak_y), (x0 - 2, body_top)], fill=INK)
+        d.line([(cx, peak_y), (x1 + 2, body_top)], fill=INK)
+        d.line([(cx, peak_y), (cx + 2, body_top)], fill=EDU_ROOFSH)
+        d.polygon([(cx - 2, peak_y), (cx + 2, peak_y), (cx + 1, peak_y - bell_h), (cx - 1, peak_y - bell_h)], fill=GOLD, outline=INK)
+        _edu_door(d, cx, ground, 7, 4)
+        _edu_window(d, x0 + 4, body_top + 3, 3)
+        _edu_window(d, x1 - 4, body_top + 3, 3)
+        by = ground - 7 - 5
+        d.rectangle([cx - 4, by, cx + 4, by + 3], fill=BOOK_BLUE, outline=INK)
         d.line([(cx, by), (cx, by + 3)], fill=INK)
+        return im
 
+    if level == 2:
+        # 2단계: 2층 학사 블록, 평지붕 + 깃발
+        body_w, body_h, flag_h = 21, 15, 8
+        margin_x, margin_top, margin_bot = 4, 3, 2
+        W = body_w + margin_x * 2
+        H = margin_top + flag_h + 2 + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        cx = W // 2
+        x0, x1 = cx - body_w // 2, cx + body_w // 2
+        body_top = ground - body_h
+        outline_rect(d, x0, body_top, x1, ground, EDU_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=EDU_WALLSH)
+        d.rectangle([x0 - 2, body_top - 2, x1 + 2, body_top], fill=EDU_ROOF2, outline=INK)
+        d.line([(x0 - 1, body_top - 1), (x1 + 1, body_top - 1)], fill=EDU_ROOF2SH)
+        _edu_flag(d, x1 - 2, body_top - 2, flag_h)
+        _edu_door(d, cx, ground, 8, 4)
+        for ry in (body_top + 2, body_top + int(body_h * 0.55)):
+            _edu_window(d, x0 + 4, ry, 3)
+            _edu_window(d, x1 - 4, ry, 3)
+        return im
+
+    if level == 3:
+        # 3단계: ㄱ자형 (2층 본관 + 단층 별관) + 놀이터
+        body_w, body_h, wing_w, wing_h, flag_h = 20, 16, 9, 9, 9
+        gap, pg_w = 1, 12
+        margin_x, margin_top, margin_bot = 4, 3, 2
+        W = pg_w + 2 + body_w + gap + wing_w + margin_x * 2
+        H = margin_top + flag_h + 2 + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        x0 = margin_x + pg_w + 2
+        x1 = x0 + body_w
+        wx0 = x1 + gap
+        wx1 = wx0 + wing_w
+        cx = (x0 + x1) // 2
+        body_top = ground - body_h
+        wing_top = ground - wing_h
+        outline_rect(d, wx0, wing_top, wx1, ground, EDU_WALL, INK)
+        d.rectangle([wx0 - 1, wing_top - 2, wx1 + 1, wing_top], fill=WOOD_SH, outline=INK)
+        _edu_door(d, (wx0 + wx1) // 2, ground, 6, 3)
+        _edu_window(d, wx1 - 3, wing_top + 2, 3)
+        d.line([(x1, body_top + 3), (wx0, wing_top + 1)], fill=WOOD)
+        d.line([(x1, body_top + 4), (wx0, wing_top + 2)], fill=WOOD_SH)
+        outline_rect(d, x0, body_top, x1, ground, EDU_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=EDU_WALLSH)
+        d.rectangle([x0 - 2, body_top - 2, x1 + 2, body_top], fill=EDU_ROOF2, outline=INK)
+        d.line([(x0 - 1, body_top - 1), (x1 + 1, body_top - 1)], fill=EDU_ROOF2SH)
+        _edu_flag(d, x1 - 2, body_top - 2, flag_h)
+        _edu_door(d, cx, ground, 8, 4)
+        for ry in (body_top + 2, body_top + int(body_h * 0.55)):
+            _edu_window(d, x0 + 3, ry, 3)
+            _edu_window(d, x1 - 3, ry, 3)
+        _edu_swingset(d, margin_x, ground, 9)
+        return im
+
+    # 4단계: 대형 교육관 (본관+별관 모두 2층 + 시계탑) + 놀이터
+    body_w, body_h, wing_w, wing_h = 22, 17, 13, 15
+    tower_w, tower_h, clock_r = 6, 10, 3
+    gap, pg_w = 1, 12
+    margin_x, margin_top, margin_bot = 4, 3, 2
+    W = pg_w + 2 + body_w + gap + wing_w + margin_x * 2
+    H = margin_top + tower_h + 2 + body_h + margin_bot
+    im = img(W, H)
+    d = ImageDraw.Draw(im)
+    ground = H - margin_bot
+    x0 = margin_x + pg_w + 2
+    x1 = x0 + body_w
+    wx0 = x1 + gap
+    wx1 = wx0 + wing_w
+    cx = (x0 + x1) // 2
+    body_top = ground - body_h
+    wing_top = ground - wing_h
+    outline_rect(d, wx0, wing_top, wx1, ground, EDU_WALL, INK)
+    d.rectangle([wx0 - 1, wing_top - 2, wx1 + 1, wing_top], fill=EDU_ROOF2, outline=INK)
+    _edu_door(d, wx0 + 3, ground, 7, 3)
+    _edu_window(d, wx1 - 4, wing_top + 2, 3)
+    _edu_window(d, wx1 - 4, wing_top + int(wing_h * 0.55), 3)
+    outline_rect(d, x0, body_top, x1, ground, EDU_WALL, INK)
+    d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=EDU_WALLSH)
+    d.rectangle([x0 - 2, body_top - 2, x1 + 2, body_top], fill=EDU_ROOF2, outline=INK)
+    d.line([(x0 - 1, body_top - 1), (x1 + 1, body_top - 1)], fill=EDU_ROOF2SH)
+    tx0, tx1 = cx - tower_w // 2, cx + tower_w // 2
+    tower_top = body_top - 2 - tower_h
+    outline_rect(d, tx0, tower_top, tx1, body_top - 2, EDU_WALL, INK)
+    ccx, ccy = cx, tower_top + clock_r + 2
+    d.ellipse([ccx - clock_r, ccy - clock_r, ccx + clock_r, ccy + clock_r], fill=CLOCK_FACE, outline=INK)
+    d.point([(ccx, ccy - 1)], fill=INK)
+    d.point([(ccx + 1, ccy)], fill=INK)
+    _edu_flag(d, cx, tower_top - 4, 5)
+    _edu_door(d, cx, ground, 9, 4)
+    for ry in (body_top + 2, body_top + int(body_h * 0.58)):
+        _edu_window(d, x0 + 3, ry, 3)
+        _edu_window(d, x1 - 3, ry, 3)
+    _edu_swingset(d, margin_x, ground, 9)
     return im
 
 # ---------------------------------------------------------------- fellowship
 FEL_WALL   = (250, 232, 214, 255)
 FEL_WALLSH = (226, 202, 178, 255)
+FEL_ROOF   = (168, 96, 66, 255)
+FEL_ROOFSH = (132, 72, 48, 255)
 AWN_A      = (214, 122, 84, 255)
 AWN_B      = (240, 228, 210, 255)
 CUP        = (196, 84, 58, 255)
 STEAM      = (240, 240, 240, 255)
+DECK_LIGHT = (231, 180, 82, 255)
+PIPE_GREY  = (150, 150, 148, 255)
+
+def _fel_table(d, tx, ground, w=4):
+    d.rectangle([tx, ground - 4, tx + w, ground - 3], fill=WOOD)
+    d.line([(tx + 1, ground - 3), (tx + 1, ground)], fill=WOOD_SH)
+    d.line([(tx + w - 1, ground - 3), (tx + w - 1, ground)], fill=WOOD_SH)
 
 def fellowship(level):
-    body_w = [16, 20, 23, 26, 28][level]
-    body_h = [10, 12, 13, 14, 15][level]
-    awn_h  = [5, 6, 6, 7, 7][level]
-    sign_h = 7
-    margin_x, margin_top, margin_bot = 6, 3, 3
-    W = body_w + margin_x * 2
-    H = margin_top + sign_h + awn_h + body_h + margin_bot
+    if level == 0:
+        # 0단계: 벽 없는 열린 천막 파빌리온
+        span, h, pole_h = 22, 8, 10
+        margin_x, margin_top, margin_bot = 4, 2, 2
+        W = span + margin_x * 2
+        H = margin_top + h + pole_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        cx = W // 2
+        x0, x1 = cx - span // 2, cx + span // 2
+        canopy_top = margin_top
+        canopy_bot = canopy_top + h
+        # 삼각 캐노피(텐트) — 스캘럽 대신 단색 지붕 + 접힘선 텍스처
+        d.polygon([(cx, canopy_top), (x1 + 1, canopy_bot), (x0 - 1, canopy_bot)], fill=AWN_A, outline=INK)
+        folds = 4
+        for i in range(1, folds):
+            fx = x0 + (x1 - x0) * i / folds
+            d.line([(cx, canopy_top + 1), (fx, canopy_bot - 1)], fill=AWN_B)
+        d.line([(x0, canopy_bot), (x1, canopy_bot)], fill=INK)
+        pole_top = canopy_bot - 1
+        pole_bot = pole_top + pole_h
+        for px in (x0 + 2, x1 - 2):
+            d.line([(px, pole_top), (px, pole_bot)], fill=WOOD)
+            d.line([(px + 1, pole_top), (px + 1, pole_bot)], fill=WOOD_SH)
+        _fel_table(d, cx - 3, ground, 6)
+        return im
+
+    if level == 1:
+        # 1단계: 작은 친교실, 소박한 박공지붕
+        body_w, body_h, roof_h = 16, 10, 6
+        margin_x, margin_top, margin_bot = 5, 3, 3
+        W = body_w + margin_x * 2
+        H = margin_top + roof_h + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        cx = W // 2
+        x0, x1 = cx - body_w // 2, cx + body_w // 2
+        body_top = ground - body_h
+        outline_rect(d, x0, body_top, x1, ground, FEL_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=FEL_WALLSH)
+        peak_y = body_top - roof_h
+        half = (x1 - x0) / 2 + 2
+        steps = max(3, body_w // 4)
+        for i in range(steps + 1):
+            t = i / steps
+            y = round(body_top - t * (body_top - peak_y))
+            xw = round(half * (1 - t))
+            d.line([(cx - xw, y), (cx + xw, y)], fill=FEL_ROOF)
+        d.line([(cx, peak_y), (x0 - 2, body_top)], fill=INK)
+        d.line([(cx, peak_y), (x1 + 2, body_top)], fill=INK)
+        d.line([(cx, peak_y), (cx + 2, body_top)], fill=FEL_ROOFSH)
+        d.rectangle([cx - 1, ground - 6, cx + 1, ground], fill=DOOR, outline=DOOR_SH)
+        wx = x1 - 4
+        d.rectangle([wx - 1, body_top + 3, wx + 1, body_top + 5], fill=WIN_WARM, outline=INK)
+        return im
+
+    if level == 2:
+        # 2단계: 카페형 친교실 — 줄무늬 어닝 + 컵 사인 (기존 매력 포인트 유지)
+        body_w, body_h, awn_h, sign_h = 20, 12, 6, 7
+        margin_x, margin_top, margin_bot = 6, 3, 3
+        W = body_w + margin_x * 2
+        H = margin_top + sign_h + awn_h + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        cx = W // 2
+        x0, x1 = cx - body_w // 2, cx + body_w // 2
+        body_top = ground - body_h
+        outline_rect(d, x0, body_top, x1, ground, FEL_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=FEL_WALLSH)
+        d.rectangle([x0 - 2, body_top - 2, x1 + 2, body_top], fill=WOOD_SH, outline=INK)
+        awn_top = body_top - 2 - awn_h
+        stripes = max(3, body_w // 5)
+        sw = (x1 - x0 + 4) / stripes
+        for i in range(stripes):
+            sx0 = x0 - 2 + i * sw
+            color = AWN_A if i % 2 == 0 else AWN_B
+            d.polygon([(sx0, awn_top), (sx0 + sw, awn_top), (sx0 + sw - 2, body_top - 2), (sx0 + 2, body_top - 2)], fill=color, outline=INK)
+        door_h = max(5, int(body_h * 0.6))
+        door_w = max(3, body_w // 5)
+        d.rectangle([cx - door_w // 2, ground - door_h, cx + door_w // 2, ground], fill=DOOR, outline=DOOR_SH)
+        for wx in (x0 + int(body_w * 0.22), x1 - int(body_w * 0.22)):
+            d.rectangle([wx - 1, body_top + 3, wx + 1, body_top + 6], fill=WIN_WARM, outline=INK)
+            d.line([(wx, body_top + 3), (wx, body_top + 6)], fill=GOLD)
+        cw = 7
+        cyx0, cyy0 = cx - cw // 2, awn_top - sign_h + 1
+        d.rectangle([cyx0, cyy0 + 2, cyx0 + cw - 2, cyy0 + sign_h - 1], fill=CUP, outline=INK)
+        d.rectangle([cyx0 + cw - 2, cyy0 + 3, cyx0 + cw, cyy0 + sign_h - 3], outline=INK)
+        d.point([(cx - 1, cyy0 - 1), (cx, cyy0 - 2), (cx + 1, cyy0 - 1)], fill=STEAM)
+        return im
+
+    if level == 3:
+        # 3단계: 2층 친교관 + 야외 테라스
+        body_w, body_h, roof_h = 22, 15, 5
+        margin_x, margin_top, margin_bot = 5, 3, 3
+        patio_w = 8
+        W = body_w + patio_w + margin_x * 2
+        H = margin_top + roof_h + body_h + margin_bot
+        im = img(W, H)
+        d = ImageDraw.Draw(im)
+        ground = H - margin_bot
+        x0 = margin_x
+        x1 = x0 + body_w
+        body_top = ground - body_h
+        outline_rect(d, x0, body_top, x1, ground, FEL_WALL, INK)
+        d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=FEL_WALLSH)
+        roof_top_y = body_top - roof_h
+        inset = 4
+        d.polygon([(x0 - 2, body_top), (x0 + inset, roof_top_y), (x1 - inset, roof_top_y), (x1 + 2, body_top)], fill=FEL_ROOF, outline=INK)
+        d.line([(x0 + inset, roof_top_y), (x1 - inset, roof_top_y)], fill=FEL_ROOFSH)
+        door_h, door_w = 8, 4
+        dcx = x0 + body_w // 3
+        d.rectangle([dcx - door_w // 2, ground - door_h, dcx + door_w // 2, ground], fill=DOOR, outline=DOOR_SH)
+        wx = x1 - 5
+        for ry in (body_top + 2, body_top + int(body_h * 0.55)):
+            d.rectangle([wx - 2, ry, wx + 2, ry + 3], fill=WIN_WARM, outline=INK)
+            d.line([(wx, ry), (wx, ry + 3)], fill=GOLD)
+        px0 = x1 + 1
+        d.line([(px0, ground), (px0 + patio_w, ground)], fill=WOOD_SH)
+        for fx in range(px0, px0 + patio_w, 3):
+            d.line([(fx, ground), (fx, ground - 3)], fill=WOOD)
+        _fel_table(d, px0 + 2, ground, 4)
+        return im
+
+    # 4단계: 대형 커뮤니티홀 (주방동 + 야외 데크)
+    body_w, body_h, roof_h = 24, 16, 6
+    margin_x, margin_top, margin_bot = 5, 3, 3
+    kit_w, kit_h = 8, 10
+    deck_w = 9
+    W = body_w + kit_w + deck_w + margin_x * 2
+    H = margin_top + roof_h + body_h + margin_bot
     im = img(W, H)
     d = ImageDraw.Draw(im)
-
     ground = H - margin_bot
-    cx = W // 2
-    x0, x1 = cx - body_w // 2, cx + body_w // 2
+    x0 = margin_x
+    x1 = x0 + body_w
+    kx0 = x1
+    kx1 = kx0 + kit_w
     body_top = ground - body_h
-
+    kit_top = ground - kit_h
+    outline_rect(d, kx0, kit_top, kx1, ground, FEL_WALL, INK)
+    d.rectangle([kx0 - 1, kit_top - 2, kx1 + 1, kit_top], fill=WOOD_SH, outline=INK)
+    pipe_x = kx1 - 2
+    d.line([(pipe_x, kit_top - 2), (pipe_x, kit_top - 7)], fill=PIPE_GREY, width=2)
+    d.point([(pipe_x - 1, kit_top - 8), (pipe_x, kit_top - 9), (pipe_x + 1, kit_top - 8)], fill=STEAM)
     outline_rect(d, x0, body_top, x1, ground, FEL_WALL, INK)
     d.line([(x0 + 1, ground - 1), (x1 - 1, ground - 1)], fill=FEL_WALLSH)
-
-    # flat roof line
-    d.rectangle([x0 - 2, body_top - 2, x1 + 2, body_top], fill=WOOD_SH, outline=INK)
-
-    # striped awning
-    awn_top = body_top - 2 - awn_h
-    stripes = max(3, body_w // 5)
-    sw = (x1 - x0 + 4) / stripes
-    for i in range(stripes):
-        sx0 = x0 - 2 + i * sw
-        color = AWN_A if i % 2 == 0 else AWN_B
-        d.polygon([(sx0, awn_top), (sx0 + sw, awn_top), (sx0 + sw - 2, body_top - 2), (sx0 + 2, body_top - 2)], fill=color, outline=INK)
-
-    door_h = max(5, int(body_h * 0.6))
-    door_w = max(3, body_w // 5)
-    d.rectangle([cx - door_w // 2, ground - door_h, cx + door_w // 2, ground], fill=DOOR, outline=DOOR_SH)
-
-    nwin = min(2, max(1, level))
-    win_y = body_top + int(body_h * 0.25)
-    win_size = max(3, body_w // 9)
-    for i in range(nwin):
-        wx = x0 + int(body_w * 0.22) if i == 0 else x1 - int(body_w * 0.22)
-        d.rectangle([wx - win_size // 2, win_y, wx + win_size // 2, win_y + win_size], fill=WIN_WARM, outline=INK)
-        d.line([(wx, win_y), (wx, win_y + win_size)], fill=GOLD)
-
-    # cup sign
-    cw = 7
-    cyx0, cyy0 = cx - cw // 2, awn_top - sign_h + 1
-    d.rectangle([cyx0, cyy0 + 2, cyx0 + cw - 2, cyy0 + sign_h - 1], fill=CUP, outline=INK)
-    d.rectangle([cyx0 + cw - 2, cyy0 + 3, cyx0 + cw, cyy0 + sign_h - 3], outline=INK)
-    if level >= 2:
-        d.point([(cx - 1, cyy0 - 1), (cx, cyy0 - 2), (cx + 1, cyy0 - 1)], fill=STEAM)
-
-    # outdoor tables at higher levels
-    if level >= 3:
-        for tx in (x0 - 5, x1 + 2):
-            d.rectangle([tx, ground - 4, tx + 4, ground - 3], fill=WOOD)
-            d.line([(tx + 1, ground - 3), (tx + 1, ground)], fill=WOOD_SH)
-            d.line([(tx + 3, ground - 3), (tx + 3, ground)], fill=WOOD_SH)
-
+    roof_top_y = body_top - roof_h
+    inset = 4
+    d.polygon([(x0 - 2, body_top), (x0 + inset, roof_top_y), (x1 - inset, roof_top_y), (x1 + 2, body_top)], fill=FEL_ROOF, outline=INK)
+    d.line([(x0 + inset, roof_top_y), (x1 - inset, roof_top_y)], fill=FEL_ROOFSH)
+    door_h, door_w = 9, 4
+    dcx = x0 + int(body_w * 0.3)
+    d.rectangle([dcx - door_w // 2, ground - door_h, dcx + door_w // 2, ground], fill=DOOR, outline=DOOR_SH)
+    for ry in (body_top + 2, body_top + int(body_h * 0.55)):
+        for wx in (x0 + int(body_w * 0.62), x0 + int(body_w * 0.82)):
+            d.rectangle([wx - 2, ry, wx + 2, ry + 3], fill=WIN_WARM, outline=INK)
+            d.line([(wx, ry), (wx, ry + 3)], fill=GOLD)
+    dx0 = kx1 + 1
+    d.line([(dx0, ground), (dx0 + deck_w, ground)], fill=WOOD_SH)
+    for fx in range(dx0, dx0 + deck_w, 3):
+        d.line([(fx, ground), (fx, ground - 3)], fill=WOOD)
+    _fel_table(d, dx0 + 1, ground, 3)
+    _fel_table(d, dx0 + 5, ground, 3)
+    string_y = ground - 9
+    d.line([(dx0, string_y), (dx0 + deck_w, string_y)], fill=WOOD)
+    for lx in range(dx0 + 1, dx0 + deck_w, 3):
+        d.point([(lx, string_y + 1)], fill=DECK_LIGHT)
     return im
 
 # ---------------------------------------------------------------- parking
