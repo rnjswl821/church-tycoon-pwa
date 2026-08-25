@@ -58,31 +58,36 @@ function nextLevel(members) {
 }
 
 const BUILDINGS = {
+  /* 예배당·교육관은 돈만으로 업그레이드할 수 없다(오너 지시) — 이미 그만큼 성도가 모여
+     "더는 못 담을 만큼" 찼을 때만 확장이 허락된다. `reqMembers`는 순수 조건(gate)이며,
+     정원(cap)처럼 업그레이드의 "효과"로 지급되는 값이 아니다 — 정원 수치 자체를 보상으로
+     주는 게 아니라, 그만큼 실제로 성장해 있어야 확장을 시작할 수 있다는 뜻. 예배당은
+     "현재 레벨 정원만큼 이미 찼을 것"을 조건으로 삼아 자연스럽게 이어지도록 했다. */
   sanctuary: {
     name: '예배당', icon: '⛪',
-    desc: '예배와 모임의 중심 공간입니다. 레벨을 올리면 성도 정원(수용 한계)이 늘어납니다.',
+    desc: '예배와 모임의 중심 공간입니다. 레벨을 올리면 성도 정원(수용 한계)이 늘어납니다. 이미 정원이 찰 만큼 성도가 모여야 다음 단계로 확장할 수 있습니다.',
     levels: [
       { cap: 40 },
-      { cap: 90,   cost: 12000000 },
-      { cap: 200,  cost: 35000000 },
-      { cap: 400,  cost: 90000000 },
-      { cap: 800,  cost: 220000000 },
-      { cap: 1600,  cost: 550000000 },
-      { cap: 3200,  cost: 1400000000 },
-      { cap: 6000,  cost: 3200000000 },
-      { cap: 10500, cost: 7500000000 },
+      { cap: 90,    cost: 12000000,   reqMembers: 40 },
+      { cap: 200,   cost: 35000000,   reqMembers: 81 },
+      { cap: 400,   cost: 90000000,   reqMembers: 180 },
+      { cap: 800,   cost: 220000000,  reqMembers: 360 },
+      { cap: 1600,  cost: 550000000,  reqMembers: 720 },
+      { cap: 3200,  cost: 1400000000, reqMembers: 1440 },
+      { cap: 6000,  cost: 3200000000, reqMembers: 2880 },
+      { cap: 10500, cost: 7500000000, reqMembers: 5400 },
     ],
     statLine: (lv) => `정원 ${BUILDINGS.sanctuary.levels[lv].cap}명`,
   },
   education: {
     name: '교육관', icon: '📚',
-    desc: '주일학교·다음세대 교육 공간입니다. 신앙지수 상승폭과 정착률이 늘어납니다.',
+    desc: '주일학교·다음세대 교육 공간입니다. 신앙지수 상승폭과 정착률이 늘어납니다. 다음세대를 감당할 만큼 성도가 모여야 확장할 수 있습니다.',
     levels: [
       { faithBonus: 0,   retention: 0 },
-      { faithBonus: 0.6, retention: 0.02, cost: 10000000 },
-      { faithBonus: 1.2, retention: 0.04, cost: 20000000 },
-      { faithBonus: 1.8, retention: 0.06, cost: 32000000 },
-      { faithBonus: 2.4, retention: 0.08, cost: 50000000 },
+      { faithBonus: 0.6, retention: 0.02, cost: 10000000, reqMembers: 15 },
+      { faithBonus: 1.2, retention: 0.04, cost: 20000000, reqMembers: EVENT_TIER_SPROUT },
+      { faithBonus: 1.8, retention: 0.06, cost: 32000000, reqMembers: EVENT_TIER_FRUIT },
+      { faithBonus: 2.4, retention: 0.08, cost: 50000000, reqMembers: EVENT_TIER_TREE },
     ],
     statLine: (lv) => `신앙지수 +${BUILDINGS.education.levels[lv].faithBonus.toFixed(1)}/주 · 정착률 +${(BUILDINGS.education.levels[lv].retention*100).toFixed(0)}%`,
   },
@@ -1102,6 +1107,7 @@ function actionUpgradeBuilding(key) {
   const next = def.levels[lv + 1];
   if (!next) return;
   if (state.fund < next.cost) return;
+  if (next.reqMembers && state.members < next.reqMembers) return;
   state.fund -= next.cost;
   state.buildings[key] = lv + 1;
   addLog(`${def.name}을(를) ${lv + 1}레벨로 확장했습니다.`);
@@ -1486,7 +1492,8 @@ function renderBuildings() {
     const lv = state.buildings[key];
     const next = def.levels[lv + 1];
     const maxed = !next;
-    const afford = next && state.fund >= next.cost;
+    const membersOk = !next || !next.reqMembers || state.members >= next.reqMembers;
+    const afford = next && state.fund >= next.cost && membersOk;
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
@@ -1495,6 +1502,7 @@ function renderBuildings() {
           <div class="card-title">${def.name} <span class="card-level">Lv.${lv}</span></div>
           <div class="card-sub">${def.desc}</div>
           <div class="card-sub">${def.statLine(lv)}</div>
+          ${!maxed && next.reqMembers && !membersOk ? `<div class="card-sub"><span class="card-lock">🔒 성도 ${fmt(next.reqMembers)}명 이상 필요(현재 ${fmt(state.members)}명)</span></div>` : ''}
         </div>
         <div class="card-action">
           ${maxed
