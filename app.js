@@ -239,8 +239,20 @@ function hashStr(s) {
    (역할+임직주차+순번)을 시드로 결정론적 이름을 만든다(교적부 열람 기능, 오너 지시).
    같은 값이면 항상 같은 이름이 나오므로 저장 데이터 마이그레이션 없이 안정적으로 표시된다. */
 function officerDisplayName(roleKey, ordainedWeek, idx) {
+  return officerDisplayProfile(roleKey, ordainedWeek, idx).name;
+}
+
+/* 연령대는 고신헌법 자격 조건을 그대로 따른다: 장로 40~66세(2부 제65조), 집사 35~66세
+   (제75조), 권사 45~66세(제81조). */
+const OFFICER_AGE_RANGE = { elder: [40, 66], deacon: [35, 66], exhorter: [45, 66] };
+
+function officerDisplayProfile(roleKey, ordainedWeek, idx) {
   const rnd = seededRng(hashStr(`${roleKey}:${ordainedWeek}:${idx}`));
-  return CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+  const [minAge, maxAge] = OFFICER_AGE_RANGE[roleKey] || [40, 66];
+  const age = minAge + Math.floor(rnd() * (maxAge - minAge + 1));
+  const family = CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
+  return { name, age, family };
 }
 
 /* 일반 성도 개별 열람(오너 지시) — 수천~수만 명이 될 수 있어 한 번에 전부 DOM에 그리면
@@ -252,12 +264,21 @@ let generalMembersShown = GENERAL_MEMBERS_PAGE;
 const CAMPAIGN_HISTORY_PAGE = 10;
 let campaignHistoryShown = CAMPAIGN_HISTORY_PAGE;
 
+/* 교인 구분(원입교인→학습교인→세례교인)은 고신헌법 2부 제21~29조 근거(README 참조) —
+   나이가 어리면 아직 학습 전 단계인 경우가 자연스러워 원입교인 비중을 살짝 높였다. */
+const MEMBER_STATUS = ['원입교인', '원입교인', '학습교인', '세례교인', '세례교인', '세례교인'];
+const MEMBER_GIFTS = ['찬양', '봉사', '가르침', '섬김', '기도', '전도', '나눔', '환대', '중보기도', '심방'];
+
 function generalMemberProfile(i) {
   const rnd = seededRng(hashStr('genmember:' + i));
   const gender = rnd() < 0.5 ? 'M' : 'F';
   const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
-  const age = 8 + Math.floor(rnd() * 72);
-  return { name, gender, age };
+  const age = Math.floor(rnd() * 80);
+  const family = age < 19 ? '미성년자' : CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
+  const status = age < 15 ? '유아세례교인' : MEMBER_STATUS[Math.floor(rnd() * MEMBER_STATUS.length)];
+  const gift = MEMBER_GIFTS[Math.floor(rnd() * MEMBER_GIFTS.length)];
+  const joinYears = Math.min(age, 1 + Math.floor(rnd() * 20));
+  return { name, gender, age, family, status, gift, joinYears };
 }
 
 const MINISTRIES = {
@@ -1920,18 +1941,29 @@ function renderRoster() {
   for (const key in officerNames) {
     const list = (state.officers && state.officers[key]) || [];
     if (!list.length) continue;
-    const names = list.map((week, idx) => officerDisplayName(key, week, idx)).join(', ');
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
         <img class="card-emoji-img" src="assets/${OFFICERS[key].icon}" alt="">
         <div class="card-main">
           <div class="card-title">${officerNames[key]} <span class="card-level">${list.length}명</span></div>
-          <div class="card-sub">${names}</div>
-          <div class="card-sub">공동의회 투표·노회 고시를 거쳐 임직한 직분자입니다.</div>
+          <div class="card-sub">공동의회 투표·노회 고시를 거쳐 임직한 직분자입니다(임기 정년까지).</div>
         </div>
       </div>`;
     wrap.appendChild(card);
+    list.forEach((week, idx) => {
+      const p = officerDisplayProfile(key, week, idx);
+      const personCard = el('div', 'card');
+      personCard.innerHTML = `
+        <div class="card-row">
+          <img class="card-emoji-img" src="assets/${OFFICERS[key].icon}" alt="">
+          <div class="card-main">
+            <div class="card-title">${p.name} <span class="card-level">${officerNames[key]}·${p.age}세</span></div>
+            <div class="card-sub">${p.family}</div>
+          </div>
+        </div>`;
+      wrap.appendChild(personCard);
+    });
   }
 
   const staffCount = Object.keys(STAFF).filter((k) => state.staffHired[k]).length;
@@ -1949,7 +1981,8 @@ function renderRoster() {
           <img class="card-emoji-img" src="assets/micon_ui_people.png" alt="">
           <div class="card-main">
             <div class="card-title">${p.name} <span class="card-level">${genderLabel(p.gender)}·${p.age}세</span></div>
-            <div class="card-sub">일반 성도</div>
+            <div class="card-sub">${p.status} · ${p.family}${p.joinYears > 0 ? ` · 등록 ${p.joinYears}년차` : ''}</div>
+            <div class="card-sub">은사: ${p.gift}</div>
           </div>
         </div>`;
       wrap.appendChild(card);
