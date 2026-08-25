@@ -737,7 +737,7 @@ function officerMaxFor(s) {
 const OFFICERS = {
   elder: {
     name: '장로', icon: '🧓',
-    desc: '만 40~66세 세례교인 중 신망 있는 이를 공동의회에서 장로로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 임기 2년 — 이후 윤번 시무 규정(제69조)에 따라 봉사자로 돌아갑니다.',
+    desc: '만 40~66세 세례교인 중 신망 있는 이를 공동의회에서 장로로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 500000, volCost: 2,
     unlock: (s) => s.members >= 30,
     lockDesc: '세례교인(성도) 30명 이상 필요 — 당회 조직요건(제109조)',
@@ -745,7 +745,7 @@ const OFFICERS = {
   },
   deacon: {
     name: '집사', icon: '🧑‍🔧',
-    desc: '봉사와 회계, 구제를 섬기는 직분입니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 임기 2년 후 봉사자로 돌아갑니다.',
+    desc: '봉사와 회계, 구제를 섬기는 직분입니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 400000, volCost: 1,
     unlock: (s) => s.volunteers >= 5,
     lockDesc: '봉사자 5명 이상 필요',
@@ -753,7 +753,7 @@ const OFFICERS = {
   },
   exhorter: {
     name: '권사', icon: '👵',
-    desc: '심방을 통해 병자와 약한 이를 위로하고 격려하는 직분입니다(2부 제81~84조). 임기 2년 후 봉사자로 돌아갑니다.',
+    desc: '심방을 통해 병자와 약한 이를 위로하고 격려하는 직분입니다(2부 제81~84조). 항존직에 준하는 직분이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 400000, volCost: 1,
     unlock: (s) => s.volunteers >= 5,
     lockDesc: '봉사자 5명 이상 필요',
@@ -868,7 +868,7 @@ function loadGame() {
       if (typeof s.officers[k] === 'number') {
         const n = s.officers[k];
         s.officers[k] = [];
-        for (let i = 0; i < n; i++) s.officers[k].push(s.week); // 구버전 호환 — 지금부터 2년 임기 새로 시작
+        for (let i = 0; i < n; i++) s.officers[k].push(s.week); // 구버전(숫자 카운트) 호환 — 임직 주차 배열로 변환
       } else if (!Array.isArray(s.officers[k])) {
         s.officers[k] = [];
       }
@@ -1046,8 +1046,6 @@ function advanceWeek() {
 
   s.week += 1;
 
-  const officerTermNote = processOfficerTerms(s);
-
   const tier = currentTier(s.members);
   let milestone = null;
   let grantedBoost = null;
@@ -1061,7 +1059,6 @@ function advanceWeek() {
   addLog(`${fmtWon(income)} 교회 재정 수입, ${fmtWon(upkeep)} 사역과 사례비 지출 (순 ${net >= 0 ? '+' : ''}${fmtWon(net)})`);
   if (neglected) addLog(`사역·직분자 없이 방치되어 관리비 ${fmtWon(neglectOverhead)}가 새고, 신앙지수·지역신뢰가 평소보다 빠르게 떨어졌습니다.`);
   if (crisisNote) addLog(crisisNote);
-  if (officerTermNote) addLog(officerTermNote);
   if (grantedBoost) addLog(`${tier.name} 성장을 축하하며 ${BOOST_ITEMS[grantedBoost].name}을(를) 받았습니다.`);
 
   return {
@@ -1070,7 +1067,7 @@ function advanceWeek() {
     repDelta: +(s.reputation - prevRep).toFixed(1),
     memberDelta: s.members - prevMembers,
     volunteerDelta: s.volunteers - prevVolunteers,
-    crisisNote, milestone, officerTermNote,
+    crisisNote, milestone,
   };
 }
 
@@ -1188,37 +1185,12 @@ function actionOrdainOfficer(key) {
   state.volunteerFrac = Math.max(0, state.volunteerFrac - def.volCost);
   state.volunteers = Math.floor(state.volunteerFrac);
   state.officers[key].push(state.week);
-  addLog(`${def.name} 한 분을 새로 임직했습니다(공동의회 투표·노회 고시 절차를 거쳤습니다 — 임기 2년).`);
+  addLog(`${def.name} 한 분을 새로 임직했습니다(공동의회 투표·노회 고시 절차를 거쳤습니다 — 항존직이라 정년까지 계속 시무합니다).`);
   saveGame();
   render();
   if (key === 'elder' && state.officers.elder.length === 2) {
     showSessionMilestone();
   }
-}
-
-const OFFICER_TERM_WEEKS = 104; // 2년
-
-function processOfficerTerms(s) {
-  const expired = [];
-  for (const key in OFFICERS) {
-    const list = s.officers[key] || [];
-    const kept = [];
-    let expiredCount = 0;
-    for (const ordainedWeek of list) {
-      if (s.week - ordainedWeek >= OFFICER_TERM_WEEKS) expiredCount++;
-      else kept.push(ordainedWeek);
-    }
-    if (expiredCount > 0) {
-      s.officers[key] = kept;
-      s.volunteerFrac = (s.volunteerFrac || 0) + expiredCount;
-      s.volunteers = Math.floor(s.volunteerFrac);
-      expired.push(`${OFFICERS[key].name} ${expiredCount}분`);
-    }
-  }
-  if (expired.length) {
-    return `${expired.join(', ')}이(가) 2년 임기를 마치고 새 봉사의 자리로 돌아갔습니다.`;
-  }
-  return null;
 }
 
 function showSessionMilestone() {
@@ -1317,7 +1289,7 @@ function renderDashboard() {
   officerCard.innerHTML = `
     <div class="card-title">🧑‍🤝‍🧑 직분자 현황</div>
     <div class="card-sub">장로 ${officerCounts.elder}/${officerMax} · 집사 ${officerCounts.deacon}/${officerMax} · 권사 ${officerCounts.exhorter}/${officerMax}</div>
-    ${officerVacant ? `<div class="card-sub">공석이 있습니다 — '사역자' 탭에서 임직할 수 있습니다(임기 2년).</div>` : ''}`;
+    ${officerVacant ? `<div class="card-sub">공석이 있습니다 — '사역자' 탭에서 임직할 수 있습니다.</div>` : ''}`;
   wrap.appendChild(officerCard);
 
   const tier = currentTier(state.members);
@@ -1418,7 +1390,6 @@ function buildSummaryRowsHtml(summary) {
   rows.push(summaryRow('봉사자', summaryDeltaText(summary.volunteerDelta), summary.volunteerDelta > 0 ? 'pos' : summary.volunteerDelta < 0 ? 'neg' : 'zero'));
   if (summary.neglected) rows.push('<div class="dash-summary-row"><span>😴 사역자·직분자·사역이 하나도 없어 교회가 방치되고 있습니다. 사역을 하나라도 시작해 보세요.</span></div>');
   if (summary.crisisNote) rows.push(`<div class="dash-summary-row"><span>⚠️ ${summary.crisisNote}</span></div>`);
-  if (summary.officerTermNote) rows.push(`<div class="dash-summary-row"><span>🔄 ${summary.officerTermNote}</span></div>`);
   return rows.join('');
 }
 
@@ -1800,7 +1771,7 @@ function initTabs() {
 
 let autoPlayOn = false;
 let autoPlayTimer = null;
-const AUTO_PLAY_INTERVAL_MS = Math.round((5 * 60 * 1000) / WEEKS_PER_MONTH); // 5분 = 게임 속 1개월(오너 지시로 2배 가속)
+const AUTO_PLAY_INTERVAL_MS = 60 * 1000; // 1분 = 게임 속 1주(오너 지시)
 
 function isAnyModalOpen() {
   const em = document.getElementById('eventModal');
