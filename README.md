@@ -289,6 +289,33 @@ python3 -m http.server 8934
   번들에도 자동 포함됨(번들 스크립트가 `assets/*.png`를 디렉터리 스캔으로 임베드하므로
   수동 등록 불필요) — 임베드 스프라이트 수 42→44.
 
+## GitHub Pages 공개 배포 — 로그인 불필요한 설치형 PWA (8차, 2026-08-25)
+
+아티팩트 링크는 클로드 계정 로그인이 있어야 열려서("링크 들어가니까 클로드 로그인을
+해야 하네") 완전 공개·로그인 불필요한 실제 웹 호스팅으로 전환했다.
+
+- `gh auth login --hostname github.com --git-protocol https --web` 로 오너 GitHub
+  계정(rnjswl821) 브라우저 device-flow 로그인(토큰이 채팅에 노출되지 않는 방식).
+- 리포지토리 `rnjswl821/church-tycoon-pwa` 를 public으로 생성·전체 푸시
+  (`gh repo create --public --source=. --remote=origin --push`).
+- `gh api -X POST repos/.../pages -f source[branch]=main -f source[path]=/` 로 GitHub
+  Pages를 main 브랜치 루트에서 바로 서빙하도록 활성화.
+- **누락 발견**: `manifest.webmanifest`·`index.html`이 `icon-192.png`/`icon-512.png`를
+  참조하고 있었는데 실제 파일이 처음부터 존재하지 않았다(설치 프롬프트가 아이콘 없이는
+  뜨지 않거나 깨질 수 있는 문제). `tools/gen_sprites.py`에 `app_icon(size)`를 추가해
+  48px 네이티브로 그린 뒤 정수배 확대(NEAREST)하는 방식으로 192/512 아이콘을 새로 생성.
+- 배포 후 `gh api .../pages/builds/latest` 로 빌드 완료(`status: built`) 확인, 헤드리스
+  크롬 스크린샷으로 실제 접속 시 게임이 정상 렌더링됨을(새 게임 Lv.1 시작, 새 길
+  네트워크·그림자·울타리·화단 모두 반영) 확인.
+
+**공개 주소**: https://rnjswl821.github.io/church-tycoon-pwa/ — 로그인 전혀 필요 없음,
+카톡 등 어디로 공유해도 그대로 열린다. 모바일 브라우저에서 열고 "홈 화면에 추가"하면
+아이콘이 생기는 설치형 PWA로도 동작한다(서비스워커 오프라인 캐시 포함 — 아티팩트
+버전과 달리 진짜 정식 배포이므로 sw.js가 정상 등록된다).
+
+- 이후 코드를 수정하면 `git add -A && git commit -m "..." && git push` 로 반영하면 몇 분 내
+  Pages에 자동 재배포된다(별도 빌드 설정 없이 정적 파일 그대로 서빙).
+
 ## 향후 확장 아이디어 (미착수)
 
 - 밸런스 수치(수입률·이탈률·성장 계수·건축비)는 여전히 프로토타입 추정치 — 실제 플레이 후
