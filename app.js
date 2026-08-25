@@ -3,6 +3,10 @@
 /* ===================== 데이터 정의 ===================== */
 
 const STORAGE_KEY = 'church-tycoon-save-v1';
+/* 저장슬롯 3개(오너 지시) — 슬롯1은 항상 자동저장되는 "지금 진행 중인 게임" 그 자체(기존
+   STORAGE_KEY 그대로, 하위호환 유지). 슬롯2·3은 자동저장되지 않는 수동 스냅샷으로, 원하는
+   시점에 "슬롯에 저장"을 눌러야 채워진다. 내보내기(파일 다운로드) 시 이 3개 중 고를 수 있다. */
+const SAVE_SLOT_KEYS = { 1: STORAGE_KEY, 2: 'church-tycoon-save-v1-slot2', 3: 'church-tycoon-save-v1-slot3' };
 
 /* 10단계 성장 시대(오너 지시로 5→10 확장) — 식물의 생장 과정을 그대로 따라간다.
    이벤트 해금 등 게임 로직은 이 배열의 인덱스가 아니라 아래 EVENT_TIER_* 상수를 직접
@@ -64,7 +68,7 @@ const BUILDINGS = {
      주는 게 아니라, 그만큼 실제로 성장해 있어야 확장을 시작할 수 있다는 뜻. 예배당은
      "현재 레벨 정원만큼 이미 찼을 것"을 조건으로 삼아 자연스럽게 이어지도록 했다. */
   sanctuary: {
-    name: '예배당', icon: '⛪',
+    name: '예배당', icon: 'micon_b_sanctuary.png',
     desc: '예배와 모임의 중심 공간입니다. 레벨을 올리면 성도 정원(수용 한계)이 늘어납니다. 이미 정원이 찰 만큼 성도가 모여야 다음 단계로 확장할 수 있습니다.',
     levels: [
       { cap: 40 },
@@ -80,7 +84,7 @@ const BUILDINGS = {
     statLine: (lv) => `정원 ${BUILDINGS.sanctuary.levels[lv].cap}명`,
   },
   education: {
-    name: '교육관', icon: '📚',
+    name: '교육관', icon: 'micon_b_education.png',
     desc: '주일학교·다음세대 교육 공간입니다. 신앙지수 상승폭과 정착률이 늘어납니다. 다음세대를 감당할 만큼 성도가 모여야 확장할 수 있습니다.',
     levels: [
       { faithBonus: 0,   retention: 0 },
@@ -92,7 +96,7 @@ const BUILDINGS = {
     statLine: (lv) => `신앙지수 +${BUILDINGS.education.levels[lv].faithBonus.toFixed(1)}/주 · 정착률 +${(BUILDINGS.education.levels[lv].retention*100).toFixed(0)}%`,
   },
   fellowship: {
-    name: '친교실', icon: '☕',
+    name: '친교실', icon: 'micon_b_fellowship.png',
     desc: '식사와 교제를 나누는 공간입니다. 지역 신뢰도와 봉사자 유입이 늘어납니다.',
     levels: [
       { repBonus: 0,   volGain: 0 },
@@ -104,7 +108,7 @@ const BUILDINGS = {
     statLine: (lv) => `지역신뢰 +${BUILDINGS.fellowship.levels[lv].repBonus.toFixed(1)}/주`,
   },
   parking: {
-    name: '주차장', icon: '🚗',
+    name: '주차장', icon: 'micon_b_parking.png',
     desc: '접근성을 높여 새가족 유입에 도움을 줍니다.',
     levels: [
       { visitorBonus: 0 },
@@ -126,28 +130,28 @@ const BUILDINGS = {
    고신헌법 자체도 안수직 자격을 남성으로 명시하므로(2부 제65조 등) 게임도 그 관례를 따랐다. */
 const STAFF = {
   edu_evangelist: {
-    name: '교육전도사', icon: '🧑‍🏫', genderConstraint: null,
+    name: '교육전도사', icon: 'micon_s_teacher.png', genderConstraint: null,
     desc: '다음세대 교육을 전담해 정착률을 크게 높입니다.',
     unlockMembers: EVENT_TIER_SPROUT,
     baseMonthlySalary: 1800000,
     effect: { retentionBonus: 0.05 },
   },
   female_evangelist: {
-    name: '여전도사', icon: '👩‍💼', genderConstraint: 'F',
+    name: '여전도사', icon: 'micon_s_evangelist_f.png', genderConstraint: 'F',
     desc: '심방과 구제를 도맡아 지역신뢰와 신앙지수를 함께 높입니다.',
     unlockMembers: EVENT_TIER_SPROUT,
     baseMonthlySalary: 1700000,
     effect: { reputationPerWeek: 0.6, faithPerWeek: 0.3 },
   },
   licentiate: {
-    name: '강도사', icon: '📜', genderConstraint: 'M',
+    name: '강도사', icon: 'micon_s_scroll.png', genderConstraint: 'M',
     desc: '설교 실습과 전도를 겸하며 새가족 유입에 도움을 줍니다.',
     unlockMembers: 60,
     baseMonthlySalary: 2000000,
     effect: { faithPerWeek: 0.6, visitorPerWeek: 0.5 },
   },
   associate_pastor: {
-    name: '부목사', icon: '👨‍💼', genderConstraint: 'M',
+    name: '부목사', icon: 'micon_s_pastor.png', genderConstraint: 'M',
     desc: '설교와 심방을 나누어 신앙지수 상승을 돕습니다.',
     unlockMembers: EVENT_TIER_FRUIT,
     baseMonthlySalary: 2500000,
@@ -163,6 +167,20 @@ function staffWeeklySalary(key, candidate) {
   const factor = (candidate && candidate.salaryFactor) || 1;
   const base = Math.round((def.baseMonthlySalary * factor * 12) / 52);
   return base + ((candidate && candidate.housing) ? HOUSING_WEEKLY_COST : 0);
+}
+
+/* 담임목사(플레이어) 사례비 — 그동안 지출 목록에 아예 없던 것을 오너 지시로 추가했다.
+   1.0배가 2026년 시세 조사 기준 표준 사례비, 0.5~2.0배 사이에서 직접 조정할 수 있다.
+   너무 박봉(0.7배 미만)이면 사기가 떨어져 신앙지수가 조금씩 더 깎이고, 넉넉히(1.0배 초과)
+   책정하면 아주 소폭(최대 +0.2/주) 신앙지수에 보탬이 된다 — 다만 상한을 낮게 잡아 "사례비만
+   올리면 이긴다"는 식으로 다른 투자를 밀어내는 지배전략이 되지 않도록 했다. */
+const PASTOR_BASE_MONTHLY_SALARY = 3500000;
+const PASTOR_SALARY_MIN_MULT = 0.5;
+const PASTOR_SALARY_MAX_MULT = 2.0;
+const PASTOR_SALARY_STEP = 0.1;
+
+function pastorWeeklySalary(s) {
+  return Math.round((PASTOR_BASE_MONTHLY_SALARY * (s.pastorSalaryMult || 1) * 12) / 52);
 }
 
 /* ---- 후보자(이력서) 생성 — 시드 기반이라 같은 자리에 새로 후보를 낼 때만 새 사람이 뜬다 ---- */
@@ -213,9 +231,17 @@ function hashStr(s) {
   return h;
 }
 
+/* 직분자 개별 이름 — 임직 주차 배열(숫자)만 저장하던 구조를 바꾸지 않고, 표시할 때만
+   (역할+임직주차+순번)을 시드로 결정론적 이름을 만든다(교적부 열람 기능, 오너 지시).
+   같은 값이면 항상 같은 이름이 나오므로 저장 데이터 마이그레이션 없이 안정적으로 표시된다. */
+function officerDisplayName(roleKey, ordainedWeek, idx) {
+  const rnd = seededRng(hashStr(`${roleKey}:${ordainedWeek}:${idx}`));
+  return CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+}
+
 const MINISTRIES = {
   dawn_prayer: {
-    name: '새벽기도', icon: '🌅',
+    name: '새벽기도', icon: 'micon_m_dawn.png',
     desc: '매일 새벽 함께 기도하며 신앙의 뿌리를 든든히 합니다.',
     upkeep: 50000,
     effect: { faithPerWeek: 1.2 },
@@ -223,7 +249,7 @@ const MINISTRIES = {
     lockDesc: '',
   },
   cell_groups: {
-    name: '소그룹모임', icon: '🏠',
+    name: '소그룹모임', icon: 'micon_m_house.png',
     desc: '구역·순모임으로 성도 간 교제와 정착을 돕습니다.',
     upkeep: 90000,
     effect: { retentionBonus: 0.03, faithPerWeek: 0.5 },
@@ -234,7 +260,7 @@ const MINISTRIES = {
      있던 것을 실제 교회 부서 편제처럼 나눴다. SFC(학생신앙운동)는 고신 교단 산하 실제
      학생신앙운동 단체명이다(고신헌법 2부 제43조 근거). */
   infant_ministry: {
-    name: '영유아부', icon: '👶',
+    name: '영유아부', icon: 'micon_m_infant.png',
     desc: '영아·유아를 둔 가정을 품는 사역입니다. 젊은 가정의 정착과 입소문에 도움이 됩니다.',
     upkeep: 80000,
     effect: { retentionBonus: 0.02, visitorPerWeek: 0.15 },
@@ -242,7 +268,7 @@ const MINISTRIES = {
     lockDesc: '교육관 1레벨 이상 필요',
   },
   elementary_ministry: {
-    name: '유초등부', icon: '🧒',
+    name: '유초등부', icon: 'micon_m_elementary.png',
     desc: '유치부터 초등 자녀를 둔 가정을 품는 사역입니다. 가정 단위 새가족 유입에 도움이 됩니다.',
     upkeep: 90000,
     effect: { retentionBonus: 0.02, visitorPerWeek: 0.25 },
@@ -250,7 +276,7 @@ const MINISTRIES = {
     lockDesc: '교육관 1레벨 이상 필요',
   },
   sfc_ministry: {
-    name: 'SFC(중고등부)', icon: '📘',
+    name: 'SFC(중고등부)', icon: 'micon_m_sfc.png',
     desc: '중·고등학생 신앙 공동체입니다. 학업으로 흔들리기 쉬운 시기에 신앙의 뿌리를 다집니다.',
     upkeep: 110000,
     effect: { faithPerWeek: 0.3, retentionBonus: 0.02 },
@@ -258,7 +284,7 @@ const MINISTRIES = {
     lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 필요`,
   },
   youth_ministry: {
-    name: '청년부', icon: '🎓',
+    name: '청년부', icon: 'micon_m_youth.png',
     desc: '청년 세대의 신앙과 공동체를 세웁니다.',
     upkeep: 150000,
     effect: { faithPerWeek: 0.6, reputationPerWeek: 0.4 },
@@ -266,7 +292,7 @@ const MINISTRIES = {
     lockDesc: '성도수 40명 이상 필요',
   },
   diakonia: {
-    name: '봉사단', icon: '🧺',
+    name: '봉사단', icon: 'micon_m_basket.png',
     desc: '지역사회를 섬기는 나눔 사역입니다. 지역 신뢰도가 꾸준히 오릅니다.',
     upkeep: 130000,
     effect: { reputationPerWeek: 1.0 },
@@ -274,7 +300,7 @@ const MINISTRIES = {
     lockDesc: '봉사자 5명 이상 필요',
   },
   bible_study: {
-    name: '성경공부', icon: '📖',
+    name: '성경공부', icon: 'micon_m_bible.png',
     desc: '말씀을 함께 배우며 신앙의 기초를 다지는 모임입니다.',
     upkeep: 60000,
     effect: { faithPerWeek: 0.8 },
@@ -282,7 +308,7 @@ const MINISTRIES = {
     lockDesc: '',
   },
   doctrine_class: {
-    name: '새신자반', icon: '📝',
+    name: '새신자반', icon: 'micon_m_notepad.png',
     desc: '원입교인이 학습교인으로 자라가도록 돕는 첫 교육입니다(2부 제3장 교인 구분 근거).',
     upkeep: 50000,
     effect: { retentionBonus: 0.02 },
@@ -290,7 +316,7 @@ const MINISTRIES = {
     lockDesc: '성도수 20명 이상 필요',
   },
   baptism_class: {
-    name: '세례교육반', icon: '💧',
+    name: '세례교육반', icon: 'micon_m_water.png',
     desc: '학습교인이 세례(입교)교인으로 자라가도록 돕는 교육입니다(2부 제21~29조 교인 구분 근거).',
     upkeep: 55000,
     effect: { retentionBonus: 0.02, faithPerWeek: 0.3 },
@@ -298,7 +324,7 @@ const MINISTRIES = {
     lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 필요`,
   },
   discipleship_training: {
-    name: '제자훈련', icon: '📔',
+    name: '제자훈련', icon: 'micon_m_notebook.png',
     desc: '세례교인이 말씀과 삶으로 더 깊이 훈련받는 과정입니다.',
     upkeep: 70000,
     effect: { faithPerWeek: 0.6 },
@@ -306,7 +332,7 @@ const MINISTRIES = {
     lockDesc: `성도 ${EVENT_TIER_FRUIT}명 이상 필요`,
   },
   leadership_school: {
-    name: '지도자훈련(리더십스쿨)', icon: '🎓',
+    name: '지도자훈련(리더십스쿨)', icon: 'micon_m_youth.png',
     desc: '장차 직분자·교사로 세워질 이들을 미리 훈련하는 과정입니다.',
     upkeep: 90000,
     effect: { faithPerWeek: 0.4, reputationPerWeek: 0.3 },
@@ -320,7 +346,7 @@ const MINISTRIES = {
    보여준다("구역"은 이미 소그룹모임이 같은 역할을 하고 있어 중복 추가하지 않았다). */
 const DEPARTMENTS = {
   mens_fellowship: {
-    name: '남전도회', icon: '👨‍👨‍👦',
+    name: '남전도회', icon: 'micon_d_mens.png',
     desc: '남성 성도들이 교제하며 전도와 봉사를 함께 감당하는 기관입니다.',
     upkeep: 40000,
     effect: { reputationPerWeek: 0.3 },
@@ -328,7 +354,7 @@ const DEPARTMENTS = {
     lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 필요`,
   },
   womens_fellowship: {
-    name: '여전도회', icon: '👩‍👩‍👧',
+    name: '여전도회', icon: 'micon_d_womens.png',
     desc: '여성 성도들이 교제하며 구제와 선교를 후원하는 기관입니다.',
     upkeep: 40000,
     effect: { reputationPerWeek: 0.3, faithPerWeek: 0.2 },
@@ -336,7 +362,7 @@ const DEPARTMENTS = {
     lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 필요`,
   },
   ministry_team: {
-    name: '사역팀(찬양·미디어)', icon: '🎤',
+    name: '사역팀(찬양·미디어)', icon: 'micon_d_mic.png',
     desc: '찬양·미디어·안내 등 예배와 행사를 섬기는 통합 봉사팀입니다.',
     upkeep: 70000,
     effect: { visitorPerWeek: 0.2, reputationPerWeek: 0.2 },
@@ -344,7 +370,7 @@ const DEPARTMENTS = {
     lockDesc: '봉사자 5명 이상 필요',
   },
   education_dept: {
-    name: '교육부', icon: '🏫',
+    name: '교육부', icon: 'micon_d_school.png',
     desc: '유아부부터 청소년부까지 다음세대 교육을 총괄하는 부서입니다.',
     upkeep: 60000,
     effect: { retentionBonus: 0.02, faithPerWeek: 0.3 },
@@ -355,13 +381,13 @@ const DEPARTMENTS = {
 
 const CAMPAIGNS = {
   revival: {
-    name: '부흥회', icon: '🔥',
+    name: '부흥회', icon: 'micon_c_flame.png',
     desc: '집중 은혜의 기간을 마련해 신앙지수를 크게 끌어올립니다.',
     cost: 5000000,
     apply: (s) => { s.faith = clamp(s.faith + 12, 0, 100); return '부흥회로 성도들의 신앙이 뜨거워졌습니다.'; },
   },
   outreach_festival: {
-    name: '전도축제', icon: '🎪',
+    name: '전도축제', icon: 'micon_c_tentflag.png',
     desc: '지역 주민을 초청하는 축제입니다. 새가족이 한 번에 여럿 찾아옵니다.',
     cost: 4000000,
     apply: (s) => {
@@ -371,7 +397,7 @@ const CAMPAIGNS = {
     },
   },
   summer_retreat: {
-    name: '여름수련회', icon: '⛺',
+    name: '여름수련회', icon: 'micon_c_tent.png',
     desc: '함께 떠나는 수련회입니다. 신앙과 공동체 결속이 깊어집니다.',
     cost: 6000000,
     apply: (s) => {
@@ -387,9 +413,9 @@ const CAMPAIGNS = {
    플레이가 진행될수록 더 큰 보상), ② 교회 재정으로 즉시 구매(행사 탭). 사용 중에는 중첩 없이
    하나만 활성화된다(동시에 여러 배속이 겹치는 혼란 방지). */
 const BOOST_ITEMS = {
-  small:  { name: '가속권(소)', icon: '⏱️', mult: 2, durationMs: 20 * 60 * 1000, cost: 2000000,  desc: '20분 동안 시간의 흐름이 2배 빨라집니다.' },
-  medium: { name: '가속권(중)', icon: '⏰', mult: 3, durationMs: 30 * 60 * 1000, cost: 6000000,  desc: '30분 동안 시간의 흐름이 3배 빨라집니다.' },
-  large:  { name: '가속권(대)', icon: '⌛', mult: 5, durationMs: 30 * 60 * 1000, cost: 15000000, desc: '30분 동안 시간의 흐름이 5배 빨라집니다.' },
+  small:  { name: '가속권(소)', icon: 'micon_boost_small.png', mult: 2, durationMs: 20 * 60 * 1000, cost: 2000000,  desc: '20분 동안 시간의 흐름이 2배 빨라집니다.' },
+  medium: { name: '가속권(중)', icon: 'micon_boost_medium.png', mult: 3, durationMs: 30 * 60 * 1000, cost: 6000000,  desc: '30분 동안 시간의 흐름이 3배 빨라집니다.' },
+  large:  { name: '가속권(대)', icon: 'micon_boost_large.png', mult: 5, durationMs: 30 * 60 * 1000, cost: 15000000, desc: '30분 동안 시간의 흐름이 5배 빨라집니다.' },
 };
 /* 성장 단계(TIERS, 총 10단계)를 3구간으로 나눠 초반엔 소, 중반엔 중, 후반엔 대를 지급한다. */
 function boostGrantFor(tierKey) {
@@ -406,7 +432,7 @@ function boostGrantFor(tierKey) {
    showEvent/showEventResult 참조). */
 const EVENTS = [
   {
-    id: 'settle', icon: '🚪', title: '새가족의 낯선 첫걸음',
+    id: 'settle', icon: 'micon_ev_door.png', title: '새가족의 낯선 첫걸음',
     body: '지난주 처음 예배에 나온 가정이 있습니다. 아직 서먹한 얼굴로 뒷자리에 앉아 있습니다.',
     choices: [
       { label: '성대한 환영 만찬을 준비한다',
@@ -420,7 +446,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'conflict', icon: '💬', title: '소그룹의 작은 오해',
+    id: 'conflict', icon: 'micon_ev_chat.png', title: '소그룹의 작은 오해',
     body: '소그룹 모임에서 작은 오해로 언성이 높아졌다는 이야기가 들려왔습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT,
     choices: [
@@ -435,7 +461,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'service_request', icon: '🏥', title: '지역 요양원의 방문 요청',
+    id: 'service_request', icon: 'micon_ev_hospital.png', title: '지역 요양원의 방문 요청',
     body: '가까운 요양원에서 위문 방문을 부탁해 왔습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT,
     choices: [
@@ -450,7 +476,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'youth_leaving', icon: '🎒', title: '청년들의 발걸음이 뜸해집니다',
+    id: 'youth_leaving', icon: 'micon_ev_backpack.png', title: '청년들의 발걸음이 뜸해집니다',
     body: '몇몇 청년들이 학업과 직장을 이유로 하나둘 발걸음이 뜸해졌습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT,
     choices: [
@@ -465,7 +491,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'special_offering', icon: '💌', title: '한 성도의 특별한 헌신',
+    id: 'special_offering', icon: 'micon_ev_letter.png', title: '한 성도의 특별한 헌신',
     body: '오래 섬겨온 한 성도가 예배당 보수를 위해 특별한 헌신을 하고 싶다고 조용히 찾아왔습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오래 섬겨온" 표현과 맞도록 최소 1년 이상 지난 뒤에만
     choices: [
@@ -480,7 +506,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'tight_finances', icon: '📉', title: '이번 달, 재정이 유난히 빠듯합니다',
+    id: 'tight_finances', icon: 'micon_ev_chartdown.png', title: '이번 달, 재정이 유난히 빠듯합니다',
     body: '이런저런 지출이 겹치며 이번 달 살림이 유난히 빠듯해졌습니다.',
     choices: [
       { label: '전 사역자와 함께 지출을 철저히 점검한다',
@@ -494,7 +520,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'joint_outreach', icon: '🤝', title: '이웃 교회의 연합 제안',
+    id: 'joint_outreach', icon: 'micon_ev_handshake.png', title: '이웃 교회의 연합 제안',
     body: '이웃 교회에서 함께하는 연합 전도행사를 제안해 왔습니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT,
     choices: [
@@ -509,7 +535,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'hard_season', icon: '🌧️', title: '어려운 시기를 지나는 이웃들',
+    id: 'hard_season', icon: 'micon_ev_rain.png', title: '어려운 시기를 지나는 이웃들',
     body: '요즘 형편이 어려워진 이웃들의 소식이 들려옵니다.',
     choices: [
       { label: '구제 기금을 넉넉히 마련해 이웃을 돕는다',
@@ -523,7 +549,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'elder_wisdom', icon: '🕯️', title: '오래 섬겨온 어른의 조언',
+    id: 'elder_wisdom', icon: 'micon_ev_candle.png', title: '오래 섬겨온 어른의 조언',
     body: '오랫동안 교회를 섬겨온 한 어르신이 조용히 다가와 기도모임을 하나 더 열어보면 어떻겠냐고 권합니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT && s.week >= 30,
     choices: [
@@ -538,7 +564,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'mission_trip', icon: '✈️', title: '단기선교 제안',
+    id: 'mission_trip', icon: 'micon_ev_plane.png', title: '단기선교 제안',
     body: '한 단체로부터 단기선교팀을 보내달라는 제안이 들어왔습니다.',
     available: (s) => s.members >= EVENT_TIER_TREE && s.fund >= 1500000,
     choices: [
@@ -553,7 +579,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'dedication_service', icon: '🎀', title: '헌당 감사예배 제안',
+    id: 'dedication_service', icon: 'micon_ev_ribbon.png', title: '헌당 감사예배 제안',
     body: '새로 확장한 공간을 두고 헌당 감사예배를 드리자는 제안이 나왔습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT && Object.values(s.buildings).some((v) => v >= 1),
     choices: [
@@ -568,7 +594,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'online_ministry', icon: '📹', title: '온라인 예배 송출 제안',
+    id: 'online_ministry', icon: 'micon_ev_camera.png', title: '온라인 예배 송출 제안',
     body: '거동이 어려운 성도들을 위해 예배를 온라인으로 송출하자는 의견이 나왔습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT,
     choices: [
@@ -583,7 +609,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'wedding_request', icon: '💒', title: '성도 자녀의 결혼식 요청',
+    id: 'wedding_request', icon: 'micon_ev_wedding.png', title: '성도 자녀의 결혼식 요청',
     body: '오래 섬긴 성도의 자녀가 우리 예배당에서 결혼식을 올리고 싶다고 요청해왔습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오래 섬긴" 표현과 맞도록 최소 1년 이상 지난 뒤에만
     choices: [
@@ -598,7 +624,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'bereavement_care', icon: '🕊️', title: '상을 당한 성도 가정',
+    id: 'bereavement_care', icon: 'micon_ev_dove.png', title: '상을 당한 성도 가정',
     body: '오랫동안 함께한 성도 가정이 갑작스러운 상을 당했습니다.',
     available: (s) => s.members >= EVENT_TIER_SPROUT && s.week >= 52, // "오랫동안 함께한" 표현과 맞도록 최소 1년 이상 지난 뒤에만
     choices: [
@@ -613,7 +639,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'facility_repair', icon: '🔧', title: '노후 시설 보수가 필요합니다',
+    id: 'facility_repair', icon: 'micon_ev_wrench.png', title: '노후 시설 보수가 필요합니다',
     body: '오래된 배관과 전기 설비 여기저기서 문제가 생기고 있습니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT && Object.values(s.buildings).some((v) => v >= 2),
     choices: [
@@ -628,7 +654,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'missionary_support', icon: '🌍', title: '파송 선교사의 후원 요청',
+    id: 'missionary_support', icon: 'micon_ev_globe.png', title: '파송 선교사의 후원 요청',
     body: '해외에서 사역 중인 선교사님이 사역지 상황이 어려워졌다며 후원을 요청해왔습니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT && s.fund >= 1000000,
     choices: [
@@ -643,7 +669,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'staff_burnout', icon: '😮‍💨', title: '지친 사역자들',
+    id: 'staff_burnout', icon: 'micon_ev_tired.png', title: '지친 사역자들',
     body: '쉼 없이 달려온 사역자들의 얼굴에 지친 기색이 역력합니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT && Object.keys(s.staffHired).filter((k) => s.staffHired[k]).length >= 2,
     choices: [
@@ -658,7 +684,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'generous_legacy', icon: '📜', title: '은퇴 성도의 유산 기부',
+    id: 'generous_legacy', icon: 'micon_s_scroll.png', title: '은퇴 성도의 유산 기부',
     body: '은퇴 후 이 교회에 정착해 신앙생활을 해온 한 성도님이, 평생 모은 재산의 일부를 교회에 남기고 싶다고 조용히 찾아오셨습니다.',
     available: (s) => s.members >= EVENT_TIER_TREE && s.week >= 60,
     choices: [
@@ -673,7 +699,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'community_disaster', icon: '🚨', title: '지역에 갑작스런 재난 소식',
+    id: 'community_disaster', icon: 'micon_ev_siren.png', title: '지역에 갑작스런 재난 소식',
     body: '인근 지역에 화재 피해 소식이 전해지며 도움의 손길이 필요합니다.',
     available: (s) => s.members >= EVENT_TIER_TREE,
     choices: [
@@ -688,7 +714,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'sunday_school_boom', icon: '🧸', title: '주일학교가 북적입니다',
+    id: 'sunday_school_boom', icon: 'micon_ev_teddy.png', title: '주일학교가 북적입니다',
     body: '아이들이 부쩍 늘어 주일학교 교실이 비좁아졌습니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT,
     choices: [
@@ -703,7 +729,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'growth_plateau', icon: '📊', title: '성도수가 제자리걸음입니다',
+    id: 'growth_plateau', icon: 'micon_ev_chartup.png', title: '성도수가 제자리걸음입니다',
     body: '건물도 사역도 늘었는데, 정작 새가족은 눈에 띄게 늘지 않고 있습니다. 지역에 우리 교회 이야기가 잘 퍼지지 않는 듯합니다.',
     available: (s) => s.members >= EVENT_TIER_FRUIT && s.reputation < 55,
     choices: [
@@ -718,7 +744,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'financial_scandal', icon: '📰', title: '재정 운용에 대한 의혹이 제기되었습니다',
+    id: 'financial_scandal', icon: 'micon_ev_newspaper.png', title: '재정 운용에 대한 의혹이 제기되었습니다',
     body: '일부 성도들 사이에서 헌금 사용처가 불투명하다는 소문이 돌기 시작했습니다. 대응을 늦추면 신뢰가 크게 흔들릴 수 있습니다.',
     available: (s) => s.members >= EVENT_TIER_TREE,
     choices: [
@@ -733,7 +759,7 @@ const EVENTS = [
     ],
   },
   {
-    id: 'schism_risk', icon: '⚡', title: '내부 분열의 조짐이 보입니다',
+    id: 'schism_risk', icon: 'micon_ev_bolt.png', title: '내부 분열의 조짐이 보입니다',
     body: '교회가 커지면서 방향성을 둘러싼 의견 차이가 깊어졌습니다. 일부 성도들이 따로 모임을 만들려 한다는 이야기까지 들려옵니다.',
     available: (s) => s.members >= EVENT_TIER_MEGA,
     choices: [
@@ -760,7 +786,7 @@ function officerMaxFor(s) {
 
 const OFFICERS = {
   elder: {
-    name: '장로', icon: '🧓',
+    name: '장로', icon: 'micon_o_elder.png',
     desc: '만 40~66세 세례교인 중 신망 있는 이를 공동의회에서 장로로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 500000, volCost: 2,
     unlock: (s) => s.members >= 30,
@@ -768,7 +794,7 @@ const OFFICERS = {
     perUnitNote: '정착률 +2%p',
   },
   deacon: {
-    name: '집사', icon: '🧑‍🔧',
+    name: '집사', icon: 'micon_o_deacon.png',
     desc: '봉사와 회계, 구제를 섬기는 직분입니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 400000, volCost: 1,
     unlock: (s) => s.volunteers >= 5,
@@ -776,7 +802,7 @@ const OFFICERS = {
     perUnitNote: '지역신뢰 +0.3/주',
   },
   exhorter: {
-    name: '권사', icon: '👵',
+    name: '권사', icon: 'micon_o_exhorter.png',
     desc: '심방을 통해 병자와 약한 이를 위로하고 격려하는 직분입니다(2부 제81~84조). 항존직에 준하는 직분이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 400000, volCost: 1,
     unlock: (s) => s.volunteers >= 5,
@@ -862,6 +888,7 @@ function newGame(name) {
     boostItems: { small: 0, medium: 0, large: 0 },
     speedBoostKey: null, speedBoostMultiplier: 1, speedBoostUntil: 0,
     gameStartDate: new Date().toISOString().slice(0, 10), // 절대 시간 표기의 기준점(게임을 실제로 시작한 날짜)
+    pastorSalaryMult: 1,
   };
 }
 
@@ -887,6 +914,7 @@ function migrateSave(s) {
   if (typeof s.speedBoostUntil !== 'number') s.speedBoostUntil = 0;
   if (typeof s.speedBoostKey === 'undefined') s.speedBoostKey = null;
   if (!s.gameStartDate) s.gameStartDate = new Date().toISOString().slice(0, 10);
+  if (typeof s.pastorSalaryMult !== 'number') s.pastorSalaryMult = 1;
   for (const k of ['elder', 'deacon', 'exhorter']) {
     if (typeof s.officers[k] === 'number') {
       const n = s.officers[k];
@@ -981,11 +1009,16 @@ function computeModifiers(s) {
     mod.reputationPerWeek += (s.officers.deacon || []).length * 0.3;
     mod.faithPerWeek += (s.officers.exhorter || []).length * 0.3;
   }
+
+  const psm = s.pastorSalaryMult || 1;
+  if (psm < 0.7) mod.faithPerWeek -= (0.7 - psm) * 3;
+  else if (psm > 1.0) mod.faithPerWeek += Math.min(psm - 1.0, 0.5) * 0.4;
+
   return mod;
 }
 
 function computeUpkeep(s) {
-  let total = 0;
+  let total = pastorWeeklySalary(s);
   for (const key in STAFF) if (s.staffHired[key]) total += staffWeeklySalary(key, s.staffHired[key]);
   for (const key in MINISTRIES) if (s.ministriesActive[key]) total += MINISTRIES[key].upkeep;
   for (const key in DEPARTMENTS) if (s.departmentsActive[key]) total += DEPARTMENTS[key].upkeep;
@@ -1183,7 +1216,7 @@ function showAssignmentPicker(staffKey, candidate) {
     if (DEPARTMENTS[k].unlock(state) && !claimed.has('department:' + k)) options.push({ type: 'department', key: k, name: DEPARTMENTS[k].name, icon: DEPARTMENTS[k].icon });
   }
 
-  document.getElementById('eventIcon').textContent = '📋';
+  document.getElementById('eventIcon').src = 'assets/micon_ui_clipboard.png';
   document.getElementById('eventTitle').textContent = `${candidate.name}에게 맡길 사역을 정해주세요`;
   document.getElementById('eventBody').textContent =
     `담당 사역·부서를 정하면 그 사역의 효과가 ${Math.round((STAFF_ASSIGNMENT_MULT - 1) * 100)}% 늘어납니다. 이미 다른 사역자가 맡고 있는 곳은 목록에 뜨지 않습니다.`;
@@ -1191,7 +1224,7 @@ function showAssignmentPicker(staffKey, candidate) {
   box.innerHTML = '';
   options.forEach((opt) => {
     const btn = el('button', 'choice-btn');
-    btn.innerHTML = `<span class="choice-label">${opt.icon} ${opt.name}</span>`;
+    btn.innerHTML = `<span class="choice-label"><img class="inline-icon" src="assets/${opt.icon}" alt=""> ${opt.name}</span>`;
     btn.addEventListener('click', () => {
       actionHireCandidateConfirmed(staffKey, candidate, { type: opt.type, key: opt.key });
       hideModal('eventModal');
@@ -1247,6 +1280,14 @@ function actionToggleHousing(key) {
   render();
 }
 
+function actionAdjustPastorSalary(delta) {
+  const next = Math.round((( state.pastorSalaryMult || 1) + delta) * 10) / 10;
+  state.pastorSalaryMult = clamp(next, PASTOR_SALARY_MIN_MULT, PASTOR_SALARY_MAX_MULT);
+  addLog(`담임목사 사례비를 월 ${fmtWon(pastorWeeklySalary(state) * 52 / 12)}(${state.pastorSalaryMult.toFixed(1)}배)(으)로 조정했습니다.`);
+  saveGame();
+  render();
+}
+
 function actionToggleMinistry(key) {
   const def = MINISTRIES[key];
   const active = !!state.ministriesActive[key];
@@ -1291,7 +1332,7 @@ function actionOrdainOfficer(key) {
 
 function showConfirmOrdain(key) {
   const def = OFFICERS[key];
-  document.getElementById('eventIcon').textContent = def.icon;
+  document.getElementById('eventIcon').src = 'assets/' + def.icon;
   document.getElementById('eventTitle').textContent = `${def.name}를 임직할까요?`;
   document.getElementById('eventBody').textContent =
     `${fmtWon(def.cost)}과 봉사자 ${def.volCost}명이 이 분께 위촉되어 쓰입니다.\n\n항존직이라 한번 임직하면 정년까지 계속 시무하며, 위촉된 봉사자는 봉사자 수로 돌아오지 않습니다.`;
@@ -1330,6 +1371,7 @@ function showSessionMilestone() {
 }
 
 function actionNextWeek() {
+  lastTickAt = Date.now();
   const summary = advanceWeek();
   state.lastSummary = summary;
   saveGame();
@@ -1364,21 +1406,59 @@ function actionResetGame() {
    너머로 확장한다 — 파일로 내보내 보관해두면 기기를 바꾸거나 브라우저 데이터를 지워도
    그 파일로 불러와 이어할 수 있다. 아티팩트(claude.ai) 미리보기 샌드박스에서는 다운로드가
    막혀 있어 이 기능이 동작하지 않을 수 있다 — GitHub Pages 정식 배포판에서 정상 동작한다. */
-function actionExportSave() {
+function readSlot(n) {
+  if (n === 1) return state;
   try {
-    const json = JSON.stringify(state, null, 2);
+    const raw = localStorage.getItem(SAVE_SLOT_KEYS[n]);
+    if (!raw) return null;
+    return migrateSave(JSON.parse(raw));
+  } catch (e) { return null; }
+}
+
+function actionSaveToSlot(n) {
+  if (n === 1) { saveGame(); render(); return; }
+  try {
+    localStorage.setItem(SAVE_SLOT_KEYS[n], JSON.stringify(state));
+    addLog(`지금 진행 상황을 저장슬롯${n}에 저장했습니다.`);
+  } catch (e) { /* storage unavailable */ }
+  render();
+}
+
+function actionExportSave() {
+  showExportSlotPicker();
+}
+
+function showExportSlotPicker() {
+  document.getElementById('eventIcon').src = 'assets/micon_ui_floppy.png';
+  document.getElementById('eventTitle').textContent = '어느 저장슬롯을 내보낼까요?';
+  document.getElementById('eventBody').textContent = '슬롯1은 지금 진행 중인 게임입니다. 슬롯2·3은 "슬롯에 저장"으로 미리 담아둔 스냅샷일 때만 내보낼 수 있습니다.';
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  for (let n = 1; n <= 3; n++) {
+    const data = readSlot(n);
+    const btn = el('button', 'choice-btn');
+    btn.innerHTML = `<span class="choice-label">저장슬롯${n}${n === 1 ? ' (현재 진행)' : ''} — ${data ? `"${data.name}" · ${data.week}주차 · 성도 ${fmt(data.members)}명` : '비어있음'}</span>`;
+    if (!data) { btn.disabled = true; }
+    else btn.addEventListener('click', () => { exportSlotData(data, n); hideModal('eventModal'); });
+    box.appendChild(btn);
+  }
+  showModal('eventModal');
+}
+
+function exportSlotData(data, n) {
+  try {
+    const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `목회타이쿤_${state.name}_${state.week}주차_${stamp}.json`;
+    a.download = `목회타이쿤_${data.name}_${data.week}주차_슬롯${n}_${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-    addLog('저장 파일을 내보냈습니다.');
-    saveGame();
+    addLog(`저장슬롯${n}을(를) 파일로 내보냈습니다.`);
   } catch (e) { /* 다운로드가 막힌 환경(예: 아티팩트 미리보기)에서는 조용히 무시 */ }
 }
 
@@ -1397,7 +1477,7 @@ function actionImportSaveFile(file) {
 }
 
 function showConfirmImport(parsed) {
-  document.getElementById('eventIcon').textContent = '📂';
+  document.getElementById('eventIcon').src = 'assets/micon_ui_folder.png';
   document.getElementById('eventTitle').textContent = '이 저장 파일을 불러올까요?';
   document.getElementById('eventBody').textContent =
     `"${parsed.name}" · ${parsed.week}주차 · 성도 ${fmt(parsed.members)}명\n\n지금 진행 중인 내용은 사라지고 이 저장 파일로 덮어씁니다.`;
@@ -1421,7 +1501,7 @@ function showConfirmImport(parsed) {
 }
 
 function showImportResult(ok, message) {
-  document.getElementById('eventIcon').textContent = ok ? '✅' : '⚠️';
+  document.getElementById('eventIcon').src = ok ? 'assets/micon_ui_check.png' : 'assets/micon_ui_warning.png';
   document.getElementById('eventTitle').textContent = ok ? '불러오기 완료' : '불러오기 실패';
   document.getElementById('eventBody').textContent = message;
   const box = document.getElementById('eventChoices');
@@ -1436,8 +1516,7 @@ function showImportResult(ok, message) {
 
 function render() {
   document.getElementById('churchName').value = state.name;
-  document.getElementById('weekLabel').textContent = formatChurchAge(state.week);
-  setStat('dateLabel', formatAbsoluteDate(state));
+  updateTimeLabels();
   const tier = currentTier(state.members);
   const lvl = currentLevel(state.members);
   document.getElementById('tierBadge').textContent = `${tier.name} · Lv.${lvl.level}`;
@@ -1481,7 +1560,7 @@ function renderDashboard() {
     ? buildSummaryRowsHtml(state.lastSummary)
     : '<div class="dash-summary-row"><span>다음 주로 넘어가면 이번 주 사역 결과가 표시됩니다.</span></div>';
   sumCard.innerHTML = `
-    <div class="card-title">📋 이번 주 요약${state.lastSummary ? ` (${state.week - 1}주차)` : ''}</div>
+    <div class="card-title"><img class="inline-icon" src="assets/micon_ui_clipboard.png" alt=""> 이번 주 요약${state.lastSummary ? ` (${state.week - 1}주차)` : ''}</div>
     <div class="dash-summary" id="dashSummary">${summaryInner}</div>`;
   wrap.appendChild(sumCard);
 
@@ -1490,7 +1569,7 @@ function renderDashboard() {
   const officerVacant = officerCounts.elder < officerMax || officerCounts.deacon < officerMax || officerCounts.exhorter < officerMax;
   const officerCard = el('div', 'card');
   officerCard.innerHTML = `
-    <div class="card-title">🧑‍🤝‍🧑 직분자 현황</div>
+    <div class="card-title"><img class="inline-icon" src="assets/micon_ui_people.png" alt=""> 직분자 현황</div>
     <div class="card-sub">장로 ${officerCounts.elder}/${officerMax} · 집사 ${officerCounts.deacon}/${officerMax} · 권사 ${officerCounts.exhorter}/${officerMax}</div>
     ${officerVacant ? `<div class="card-sub">공석이 있습니다 — '사역자' 탭에서 임직할 수 있습니다.</div>` : ''}`;
   wrap.appendChild(officerCard);
@@ -1505,7 +1584,7 @@ function renderDashboard() {
     return `<span class="${reached ? 'reached' : ''}">${t.name}</span>`;
   }).join('<span> → </span>');
   track.innerHTML = `
-    <div class="card-title">✨ 교회의 성장 단계 — ${tier.name} (Lv.${lvl.level}/100)</div>
+    <div class="card-title"><img class="inline-icon" src="assets/micon_ui_sparkle.png" alt=""> 교회의 성장 단계 — ${tier.name} (Lv.${lvl.level}/100)</div>
     <div class="card-sub">${nl ? `다음 레벨(Lv.${nl.level})까지 성도 ${fmt(nl.min - state.members)}명` : '최고 레벨입니다.'}</div>
     <div class="card-sub">${nt ? `다음 단계 '${nt.name}'까지 성도 ${fmt(nt.min - state.members)}명` : '최고 단계에 도달했습니다.'}</div>
     <div class="milestone-track">${trackHtml}</div>`;
@@ -1523,7 +1602,7 @@ function renderCampaigns() {
     const afford = state.fund >= def.cost;
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
           <div class="card-title">${def.name}</div>
           <div class="card-sub">${def.desc}</div>
@@ -1541,7 +1620,7 @@ function renderCampaigns() {
   if (boosting) {
     const remainMin = Math.max(0, Math.ceil((state.speedBoostUntil - Date.now()) / 60000));
     const activeCard = el('div', 'card');
-    activeCard.innerHTML = `<div class="card-title">${BOOST_ITEMS[state.speedBoostKey].icon} ${BOOST_ITEMS[state.speedBoostKey].name} 사용 중</div>
+    activeCard.innerHTML = `<div class="card-title"><img class="inline-icon" src="assets/${BOOST_ITEMS[state.speedBoostKey].icon}" alt=""> ${BOOST_ITEMS[state.speedBoostKey].name} 사용 중</div>
       <div class="card-sub">${state.speedBoostMultiplier}배속 · ${remainMin}분 남음 (끝날 때까지 다른 가속권을 겹쳐 쓸 수 없습니다)</div>`;
     wrap.appendChild(activeCard);
   }
@@ -1552,7 +1631,7 @@ function renderCampaigns() {
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
           <div class="card-title">${def.name} <span class="card-level">보유 ${owned}개</span></div>
           <div class="card-sub">${def.desc}</div>
@@ -1591,8 +1670,8 @@ function buildSummaryRowsHtml(summary) {
   rows.push(summaryRow('지역신뢰', summaryDeltaText(summary.repDelta), summary.repDelta > 0 ? 'pos' : summary.repDelta < 0 ? 'neg' : 'zero'));
   rows.push(summaryRow('성도수', summaryDeltaText(summary.memberDelta), summary.memberDelta > 0 ? 'pos' : summary.memberDelta < 0 ? 'neg' : 'zero'));
   rows.push(summaryRow('봉사자', summaryDeltaText(summary.volunteerDelta), summary.volunteerDelta > 0 ? 'pos' : summary.volunteerDelta < 0 ? 'neg' : 'zero'));
-  if (summary.neglected) rows.push('<div class="dash-summary-row"><span>😴 사역자·직분자·사역이 하나도 없어 교회가 방치되고 있습니다. 사역을 하나라도 시작해 보세요.</span></div>');
-  if (summary.crisisNote) rows.push(`<div class="dash-summary-row"><span>⚠️ ${summary.crisisNote}</span></div>`);
+  if (summary.neglected) rows.push('<div class="dash-summary-row"><span><img class="inline-icon-sm" src="assets/micon_ui_sleep.png" alt=""> 사역자·직분자·사역이 하나도 없어 교회가 방치되고 있습니다. 사역을 하나라도 시작해 보세요.</span></div>');
+  if (summary.crisisNote) rows.push(`<div class="dash-summary-row"><span><img class="inline-icon-sm" src="assets/micon_ui_warning.png" alt=""> ${summary.crisisNote}</span></div>`);
   return rows.join('');
 }
 
@@ -1615,12 +1694,12 @@ function renderBuildings() {
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
           <div class="card-title">${def.name} <span class="card-level">Lv.${lv}</span></div>
           <div class="card-sub">${def.desc}</div>
           <div class="card-sub">${def.statLine(lv)}</div>
-          ${!maxed && next.reqMembers && !membersOk ? `<div class="card-sub"><span class="card-lock">🔒 성도 ${fmt(next.reqMembers)}명 이상 필요(현재 ${fmt(state.members)}명)</span></div>` : ''}
+          ${!maxed && next.reqMembers && !membersOk ? `<div class="card-sub"><span class="card-lock"><img class="inline-icon-sm" src="assets/micon_ui_lock.png" alt=""> 성도 ${fmt(next.reqMembers)}명 이상 필요(현재 ${fmt(state.members)}명)</span></div>` : ''}
         </div>
         <div class="card-action">
           ${maxed
@@ -1644,9 +1723,9 @@ function renderMinistries() {
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
-          <div class="card-title">${def.name} ${!unlocked ? `<span class="card-lock">🔒 ${def.lockDesc}</span>` : ''}</div>
+          <div class="card-title">${def.name} ${!unlocked ? `<span class="card-lock"><img class="inline-icon-sm" src="assets/micon_ui_lock.png" alt=""> ${def.lockDesc}</span>` : ''}</div>
           <div class="card-sub">${def.desc}</div>
           <div class="card-sub">주당 유지비 ${fmtWon(def.upkeep)}</div>
         </div>
@@ -1666,9 +1745,9 @@ function renderMinistries() {
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
-          <div class="card-title">${def.name} ${!unlocked ? `<span class="card-lock">🔒 ${def.lockDesc}</span>` : ''}</div>
+          <div class="card-title">${def.name} ${!unlocked ? `<span class="card-lock"><img class="inline-icon-sm" src="assets/micon_ui_lock.png" alt=""> ${def.lockDesc}</span>` : ''}</div>
           <div class="card-sub">${def.desc}</div>
           <div class="card-sub">주당 유지비 ${fmtWon(def.upkeep)}</div>
         </div>
@@ -1687,18 +1766,27 @@ function genderLabel(g) { return g === 'F' ? '여성' : '남성'; }
 
 function renderRoster() {
   const wrap = el('div');
-  wrap.appendChild(el('div', 'section-title', '섬기는 이들 — 담임목회자·부교역자·직분자 명단'));
+  wrap.appendChild(el('div', 'section-title', '교적부 — 담임목회자·부교역자·직분자·성도 명단'));
 
   const pastorCard = el('div', 'card');
+  const pastorWeekly = pastorWeeklySalary(state);
+  const psm = state.pastorSalaryMult || 1;
   pastorCard.innerHTML = `
     <div class="card-row">
-      <div class="card-emoji">⛪</div>
+      <img class="card-emoji-img" src="assets/micon_b_sanctuary.png" alt="">
       <div class="card-main">
         <div class="card-title">담임목사 <span class="card-level">플레이어</span></div>
         <div class="card-sub">${state.name}을(를) 섬기고 있습니다.</div>
+        <div class="card-sub">월 사례비 ${fmtWon(pastorWeekly * 52 / 12)} (${psm.toFixed(1)}배)${psm < 0.7 ? ' · 박봉으로 사기가 떨어지고 있습니다' : psm > 1.0 ? ' · 넉넉한 사례비로 사기가 오릅니다' : ''}</div>
       </div>
+    </div>
+    <div class="card-row" style="margin-top:8px; gap:6px">
+      <button class="btn btn-ghost btn-small" id="pastorSalaryDown" ${psm <= PASTOR_SALARY_MIN_MULT ? 'disabled' : ''}>− 낮추기</button>
+      <button class="btn btn-ghost btn-small" id="pastorSalaryUp" ${psm >= PASTOR_SALARY_MAX_MULT ? 'disabled' : ''}>+ 올리기</button>
     </div>`;
   wrap.appendChild(pastorCard);
+  pastorCard.querySelector('#pastorSalaryDown').addEventListener('click', () => actionAdjustPastorSalary(-PASTOR_SALARY_STEP));
+  pastorCard.querySelector('#pastorSalaryUp').addEventListener('click', () => actionAdjustPastorSalary(PASTOR_SALARY_STEP));
 
   for (const key in STAFF) {
     const hired = state.staffHired[key];
@@ -1707,7 +1795,7 @@ function renderRoster() {
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
           <div class="card-title">${hired.name} <span class="card-level">${def.name}</span></div>
           <div class="card-sub">${genderLabel(hired.gender)}·${hired.age}세 · ${hired.family} · MBTI ${hired.mbti}</div>
@@ -1719,16 +1807,17 @@ function renderRoster() {
   }
 
   const officerNames = { elder: '장로', deacon: '집사', exhorter: '권사' };
-  const officerIcons = { elder: '🧓', deacon: '🧑‍🔧', exhorter: '👵' };
   for (const key in officerNames) {
-    const count = (state.officers && (state.officers[key] || []).length) || 0;
-    if (!count) continue;
+    const list = (state.officers && state.officers[key]) || [];
+    if (!list.length) continue;
+    const names = list.map((week, idx) => officerDisplayName(key, week, idx)).join(', ');
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${officerIcons[key]}</div>
+        <img class="card-emoji-img" src="assets/${OFFICERS[key].icon}" alt="">
         <div class="card-main">
-          <div class="card-title">${officerNames[key]} <span class="card-level">${count}명</span></div>
+          <div class="card-title">${officerNames[key]} <span class="card-level">${list.length}명</span></div>
+          <div class="card-sub">${names}</div>
           <div class="card-sub">공동의회 투표·노회 고시를 거쳐 임직한 직분자입니다.</div>
         </div>
       </div>`;
@@ -1737,7 +1826,22 @@ function renderRoster() {
 
   const staffCount = Object.keys(STAFF).filter((k) => state.staffHired[k]).length;
   const officerCount = (state.officers.elder || []).length + (state.officers.deacon || []).length + (state.officers.exhorter || []).length;
-  if (staffCount === 0 && officerCount === 0) {
+  const namedCount = 1 + staffCount + officerCount; // 담임목사 + 부교역자 + 직분자
+  const generalCount = Math.max(0, state.members - namedCount);
+  if (generalCount > 0) {
+    const generalCard = el('div', 'card');
+    generalCard.innerHTML = `
+      <div class="card-row">
+        <img class="card-emoji-img" src="assets/micon_ui_people.png" alt="">
+        <div class="card-main">
+          <div class="card-title">일반 성도 <span class="card-level">${fmt(generalCount)}명</span></div>
+          <div class="card-sub">개별 명단 없이 인원수로 관리되는 나머지 성도들입니다.</div>
+        </div>
+      </div>`;
+    wrap.appendChild(generalCard);
+  }
+
+  if (staffCount === 0 && officerCount === 0 && state.members <= 1) {
     wrap.appendChild(el('div', 'log-empty', '아직 담임목사 혼자입니다. 부교역자를 청빙하거나 직분자를 임직해 보세요.'));
   }
 
@@ -1757,9 +1861,9 @@ function renderStaff() {
       const card = el('div', 'card');
       card.innerHTML = `
         <div class="card-row">
-          <div class="card-emoji">${def.icon}</div>
+          <img class="card-emoji-img" src="assets/${def.icon}" alt="">
           <div class="card-main">
-            <div class="card-title">${def.name} <span class="card-lock">🔒 성도 ${def.unlockMembers}명 이상 필요</span></div>
+            <div class="card-title">${def.name} <span class="card-lock"><img class="inline-icon-sm" src="assets/micon_ui_lock.png" alt=""> 성도 ${def.unlockMembers}명 이상 필요</span></div>
             <div class="card-sub">${def.desc}</div>
           </div>
         </div>`;
@@ -1772,7 +1876,7 @@ function renderStaff() {
       const card = el('div', 'card');
       card.innerHTML = `
         <div class="card-row">
-          <div class="card-emoji">${def.icon}</div>
+          <img class="card-emoji-img" src="assets/${def.icon}" alt="">
           <div class="card-main">
             <div class="card-title">${def.name} · ${hired.name} <span class="card-level">${genderLabel(hired.gender)}·${hired.age}세</span></div>
             <div class="card-sub">${hired.family} · MBTI ${hired.mbti} · 주력: ${hired.styles.join('·')}</div>
@@ -1795,7 +1899,7 @@ function renderStaff() {
       wrap2.innerHTML = `
         <div class="card-row">
           <div class="card-main">
-            <div class="card-title">${def.icon} ${def.name} 후보자 ${cands.length}명</div>
+            <div class="card-title"><img class="inline-icon" src="assets/${def.icon}" alt=""> ${def.name} 후보자 ${cands.length}명</div>
             <div class="card-sub">${def.desc}</div>
           </div>
           <div class="card-action"><button class="btn btn-ghost btn-small" data-reroll="${key}">다른 후보 보기</button></div>
@@ -1834,9 +1938,9 @@ function renderStaff() {
     const card = el('div', 'card');
     card.innerHTML = `
       <div class="card-row">
-        <div class="card-emoji">${def.icon}</div>
+        <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
-          <div class="card-title">${def.name} <span class="card-level">${count}/${officerMax}</span> ${!unlocked ? `<span class="card-lock">🔒 ${def.lockDesc}</span>` : ''}</div>
+          <div class="card-title">${def.name} <span class="card-level">${count}/${officerMax}</span> ${!unlocked ? `<span class="card-lock"><img class="inline-icon-sm" src="assets/micon_ui_lock.png" alt=""> ${def.lockDesc}</span>` : ''}</div>
           <div class="card-sub">${def.desc}</div>
           <div class="card-sub">1인당 ${def.perUnitNote} · 봉사자 ${def.volCost}명 위촉</div>
         </div>
@@ -1859,15 +1963,21 @@ function renderLog() {
   wrap.appendChild(el('div', 'section-title', '저장 관리'));
   const saveCard = el('div', 'card');
   saveCard.innerHTML = `
-    <div class="card-title">💾 저장 파일 내보내기·불러오기</div>
-    <div class="card-sub">이 기기·이 브라우저에는 자동으로 저장되지만, 기기를 바꾸거나 브라우저 데이터를 지우면 사라집니다. 파일로 내보내 보관해두면 다른 기기에서도 이어할 수 있습니다.</div>
+    <div class="card-title"><img class="inline-icon" src="assets/micon_ui_floppy.png" alt=""> 저장 파일 내보내기·불러오기</div>
+    <div class="card-sub">슬롯1은 자동으로 저장되는 지금 진행 중인 게임입니다. 슬롯2·3은 원할 때 "슬롯에 저장"으로 스냅샷을 담아두는 여분 슬롯입니다.</div>
     <div class="card-row" style="margin-top:10px; gap:6px">
+      <button class="btn btn-ghost btn-small" id="saveSlot2Btn">슬롯2에 저장</button>
+      <button class="btn btn-ghost btn-small" id="saveSlot3Btn">슬롯3에 저장</button>
+    </div>
+    <div class="card-row" style="margin-top:6px; gap:6px">
       <button class="btn btn-outline btn-small" id="exportSaveBtn">내보내기</button>
       <button class="btn btn-outline btn-small" id="importSaveBtn">불러오기</button>
     </div>
     <input type="file" id="importSaveInput" accept="application/json" style="display:none">`;
   wrap.appendChild(saveCard);
   saveCard.querySelector('#exportSaveBtn').addEventListener('click', actionExportSave);
+  saveCard.querySelector('#saveSlot2Btn').addEventListener('click', () => actionSaveToSlot(2));
+  saveCard.querySelector('#saveSlot3Btn').addEventListener('click', () => actionSaveToSlot(3));
   const importInput = saveCard.querySelector('#importSaveInput');
   saveCard.querySelector('#importSaveBtn').addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', () => {
@@ -1900,7 +2010,7 @@ function snapshotStats(s) {
 }
 
 function showEvent(ev) {
-  document.getElementById('eventIcon').textContent = ev.icon;
+  document.getElementById('eventIcon').src = 'assets/' + ev.icon;
   document.getElementById('eventTitle').textContent = ev.title;
   document.getElementById('eventBody').textContent = ev.body;
   const choicesBox = document.getElementById('eventChoices');
@@ -1923,7 +2033,7 @@ function showEvent(ev) {
 }
 
 function showEventResult(ev, msg, before, after) {
-  document.getElementById('eventIcon').textContent = ev.icon;
+  document.getElementById('eventIcon').src = 'assets/' + ev.icon;
   document.getElementById('eventTitle').textContent = '그 결과…';
   document.getElementById('eventBody').textContent = msg || '';
   const box = document.getElementById('eventChoices');
@@ -1955,8 +2065,8 @@ function showEventResult(ev, msg, before, after) {
 
 function showMilestone(tier, grantedBoost) {
   document.getElementById('milestoneTitle').textContent = `${tier.name}(으)로 성장했습니다!`;
-  document.getElementById('milestoneBody').textContent = tier.msg +
-    (grantedBoost ? `\n\n🎁 ${BOOST_ITEMS[grantedBoost].name}을(를) 받았습니다! '행사' 탭에서 사용할 수 있습니다.` : '');
+  document.getElementById('milestoneBody').innerHTML = escapeHtml(tier.msg) +
+    (grantedBoost ? `<br><br><img class="inline-icon" src="assets/micon_ui_gift.png" alt=""> ${escapeHtml(BOOST_ITEMS[grantedBoost].name)}을(를) 받았습니다! '행사' 탭에서 사용할 수 있습니다.` : '');
   document.getElementById('milestoneCloseBtn').textContent = '계속하기';
   showModal('milestoneModal');
 }
@@ -1965,7 +2075,7 @@ function showEnding() {
   const officerCount = (state.officers.elder || []).length + (state.officers.deacon || []).length + (state.officers.exhorter || []).length;
   const buildingLevels = Object.values(state.buildings).reduce((a, b) => a + b, 0);
   const finalTier = TIERS[TIERS.length - 1];
-  document.getElementById('milestoneTitle').textContent = `🎉 ${state.name}, ${finalTier.name}(으)로 성장했습니다!`;
+  document.getElementById('milestoneTitle').innerHTML = `<img class="inline-icon" src="assets/micon_ui_party.png" alt=""> ${escapeHtml(state.name)}, ${escapeHtml(finalTier.name)}(으)로 성장했습니다!`;
   document.getElementById('milestoneBody').textContent =
     `${finalTier.msg} 작은 씨앗 하나로 시작한 교회가 ${state.week}주 동안의 여정 끝에 ` +
     `성도 ${fmt(state.members)}명이 함께하는 ${finalTier.name}이(가) 되었습니다.\n\n` +
@@ -1998,7 +2108,27 @@ function initTabs() {
 
 let autoPlayOn = false;
 let autoPlayTimer = null;
+let lastTickAt = Date.now(); // 마지막으로 주가 실제로 넘어간 실시간 시각 — 날짜 표기를 실시간으로 보간하는 데 쓴다
 const AUTO_PLAY_INTERVAL_MS = 60 * 1000; // 1분 = 게임 속 1주(오너 지시)
+
+/* 대시보드 상단 날짜·나이 표기가 다음 주 틱까지 멈춰 있지 않고 실시간으로 흘러가도록
+   보간한다(오너 지시: "yyyymmdd 표기 실시간 반영"). 실제 게임 상태(state.week)는 건드리지
+   않고 화면 표시값만 계산 — 일시정지 중이거나 모달이 떠 있을 때는 보간하지 않는다. */
+function currentDisplayWeek() {
+  if (!autoPlayOn || isAnyModalOpen()) return state.week;
+  const interval = AUTO_PLAY_INTERVAL_MS / currentSpeedMultiplier();
+  const frac = Math.min(0.999, Math.max(0, (Date.now() - lastTickAt) / interval));
+  return state.week + frac;
+}
+
+function updateTimeLabels() {
+  const wl = document.getElementById('weekLabel');
+  const dl = document.getElementById('dateLabel');
+  if (!wl || !dl) return;
+  const dw = currentDisplayWeek();
+  wl.textContent = formatChurchAge(dw);
+  dl.textContent = formatAbsoluteDate({ gameStartDate: state.gameStartDate, week: dw });
+}
 
 function isAnyModalOpen() {
   const em = document.getElementById('eventModal');
@@ -2011,7 +2141,7 @@ function isAnyModalOpen() {
    매 틱마다 다시 스케줄링해서, 가속권을 새로 쓰면 다음 틱부터 바로 빨라지게 했다. */
 function currentSpeedMultiplier() {
   if (state.speedBoostUntil && Date.now() < state.speedBoostUntil) return state.speedBoostMultiplier || 1;
-  if (state.speedBoostUntil) { state.speedBoostUntil = 0; state.speedBoostMultiplier = 1; state.speedBoostKey = null; }
+  if (state.speedBoostUntil) { state.speedBoostUntil = 0; state.speedBoostMultiplier = 1; state.speedBoostKey = null; lastTickAt = Date.now(); }
   return 1;
 }
 
@@ -2038,6 +2168,7 @@ function scheduleAutoTick() {
 
 function setAutoPlay(on) {
   autoPlayOn = on;
+  if (on) lastTickAt = Date.now(); // 재개 시점부터 다시 보간(멈춰 있던 시간이 갑자기 확 흐른 것처럼 보이지 않도록)
   try { localStorage.setItem('church-tycoon-autoplay', on ? '1' : '0'); } catch (e) { /* ignore */ }
   updateAutoPlayButton();
   scheduleAutoTick();
@@ -2051,6 +2182,7 @@ function actionUseBoost(key) {
   state.speedBoostKey = key;
   state.speedBoostMultiplier = def.mult;
   state.speedBoostUntil = Date.now() + def.durationMs;
+  lastTickAt = Date.now(); // 배속이 바뀐 시점부터 새 속도로 다시 보간
   addLog(`${def.name}을(를) 사용해 ${def.mult}배속으로 시간이 흐릅니다.`);
   saveGame();
   render();
@@ -2072,7 +2204,14 @@ function actionBuyBoost(key) {
 /* 앱을 닫아둔 실제 시간만큼 교회는 계속 운영된다 — 모바일 타이쿤 게임의 핵심 관례. */
 
 const OFFLINE_SECONDS_PER_WEEK = 60; // 실시간 자동진행(1분=1주)과 같은 속도로 맞춤 — 예전엔 5배 느려서 앱을 꺼두는 쪽이 오히려 손해였다
-const OFFLINE_MAX_WEEKS = 24;
+/* 웹페이지는 탭이 닫히거나 백그라운드로 가면 실제로 JS가 돌지 않는다(브라우저 표준 제약 —
+   진짜 백그라운드 실행은 서버 없이는 불가능) — 그래서 "떠나 있던 만큼 계속 운영됐다"는
+   체감은 돌아왔을 때 경과 시간만큼 한 번에 계산해 몰아주는 방식으로 구현한다. 예전엔 최대
+   24주(약 24분)만 인정해 그 이상 떠나 있으면 나머지 시간이 그냥 사라졌는데, 오너 지시로
+   "앱을 꺼두거나 벗어나 있어도 진행되는 느낌"을 살리기 위해 최대 24시간(하루) 분량까지
+   인정하도록 늘렸다. 그 이상(며칠 이상 방치)은 여전히 캡을 둬서 한 번에 게임 후반부를
+   건너뛰는 극단적 결과를 막는다. */
+const OFFLINE_MAX_WEEKS = 1440;
 
 function applyOfflineProgress() {
   const now = Date.now();
@@ -2100,7 +2239,7 @@ function applyOfflineProgress() {
 
 function showOfflineSummary(result) {
   if (result.reachedEnding) { showEnding(); return; }
-  document.getElementById('eventIcon').textContent = '⏳';
+  document.getElementById('eventIcon').src = 'assets/micon_ui_hourglass.png';
   document.getElementById('eventTitle').textContent = `자리를 비운 사이 ${result.weeks}주가 지났습니다`;
   const boostText = Object.keys(result.boostsGranted || {})
     .map((k) => `${BOOST_ITEMS[k].name} ${result.boostsGranted[k]}개`).join(', ');
@@ -2166,10 +2305,11 @@ function initFooter() {
     setAutoPlay(saved === null ? true : saved === '1');
   }
   setInterval(updateAutoPlayButton, 5000); // 가속권 잔여시간 표시를 주기적으로 갱신
+  setInterval(updateTimeLabels, 1000); // 상단 날짜·나이 표기를 실시간으로 흘러가듯 갱신
 }
 
 function showConfirmReset() {
-  document.getElementById('eventIcon').textContent = '🔄';
+  document.getElementById('eventIcon').src = 'assets/micon_ui_refresh.png';
   document.getElementById('eventTitle').textContent = '새로 시작할까요?';
   document.getElementById('eventBody').textContent = '지금까지의 진행 상황이 사라지고 처음부터 다시 시작합니다.';
   const box = document.getElementById('eventChoices');

@@ -65,7 +65,10 @@ body {
 }
 .splash-screen.hidden { opacity: 0; pointer-events: none; }
 .splash-logo {
-  font-size: 64px;
+  width: 64px;
+  height: 64px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
   animation: splashPop 0.5s ease;
 }
 .splash-title {
@@ -97,7 +100,7 @@ body {
   min-width: 0;
   flex: 1;
 }
-.topbar-icon { font-size: 20px; flex-shrink: 0; }
+.topbar-icon { width: 20px; height: 20px; flex-shrink: 0; image-rendering: pixelated; image-rendering: crisp-edges; }
 .church-name-input {
   font-size: 17px;
   font-weight: 700;
@@ -275,6 +278,9 @@ body {
   gap: 10px;
 }
 .card-emoji { font-size: 26px; flex-shrink: 0; }
+.card-emoji-img { width: 28px; height: 28px; flex-shrink: 0; image-rendering: pixelated; image-rendering: crisp-edges; }
+.inline-icon { width: 15px; height: 15px; vertical-align: -3px; image-rendering: pixelated; image-rendering: crisp-edges; }
+.inline-icon-sm { width: 11px; height: 11px; vertical-align: -1.5px; image-rendering: pixelated; image-rendering: crisp-edges; }
 .card-main { flex: 1; min-width: 0; }
 .card-title { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 6px; }
 .card-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; line-height: 1.5; }
@@ -444,7 +450,7 @@ body {
   text-align: center;
   box-shadow: 0 12px 40px rgba(0,0,0,0.25);
 }
-.modal-icon { font-size: 40px; margin-bottom: 6px; }
+.modal-icon { width: 44px; height: 44px; margin-bottom: 6px; image-rendering: pixelated; image-rendering: crisp-edges; }
 .modal-title { font-size: 18px; margin: 4px 0 10px; }
 .modal-body { font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin-bottom: 18px; white-space: pre-line; }
 .modal-choices {
