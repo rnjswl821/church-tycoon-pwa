@@ -230,13 +230,32 @@ const MINISTRIES = {
     unlock: (s) => s.volunteers >= 3,
     lockDesc: '봉사자 3명 이상 필요',
   },
-  children_ministry: {
-    name: '어린이부', icon: '🧒',
-    desc: '다음세대를 품는 사역입니다. 가정 단위 새가족 유입에 도움이 됩니다.',
-    upkeep: 160000,
-    effect: { visitorPerWeek: 0.4, retentionBonus: 0.02 },
+  /* 다음세대 사역을 연령대별로 세분화(오너 지시) — 기존 "어린이부" 하나로 뭉뚱그려져
+     있던 것을 실제 교회 부서 편제처럼 나눴다. SFC(학생신앙운동)는 고신 교단 산하 실제
+     학생신앙운동 단체명이다(고신헌법 2부 제43조 근거). */
+  infant_ministry: {
+    name: '영유아부', icon: '👶',
+    desc: '영아·유아를 둔 가정을 품는 사역입니다. 젊은 가정의 정착과 입소문에 도움이 됩니다.',
+    upkeep: 80000,
+    effect: { retentionBonus: 0.02, visitorPerWeek: 0.15 },
     unlock: (s) => s.buildings.education >= 1,
     lockDesc: '교육관 1레벨 이상 필요',
+  },
+  elementary_ministry: {
+    name: '유초등부', icon: '🧒',
+    desc: '유치부터 초등 자녀를 둔 가정을 품는 사역입니다. 가정 단위 새가족 유입에 도움이 됩니다.',
+    upkeep: 90000,
+    effect: { retentionBonus: 0.02, visitorPerWeek: 0.25 },
+    unlock: (s) => s.buildings.education >= 1,
+    lockDesc: '교육관 1레벨 이상 필요',
+  },
+  sfc_ministry: {
+    name: 'SFC(중고등부)', icon: '📘',
+    desc: '중·고등학생 신앙 공동체입니다. 학업으로 흔들리기 쉬운 시기에 신앙의 뿌리를 다집니다.',
+    upkeep: 110000,
+    effect: { faithPerWeek: 0.3, retentionBonus: 0.02 },
+    unlock: (s) => s.members >= EVENT_TIER_SPROUT,
+    lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 필요`,
   },
   youth_ministry: {
     name: '청년부', icon: '🎓',
@@ -832,7 +851,7 @@ function newGame(name) {
     candidateGen: {},
     ministriesActive: {},
     departmentsActive: {},
-    officers: { elder: [], deacon: [], exhorter: [] }, // 각 원소 = 임직한 주차(2년 임기 후 자동 만료)
+    officers: { elder: [], deacon: [], exhorter: [] }, // 각 원소 = 임직한 주차(항존직 — 자동 만료 없음)
     logs: [],
     recentEventIds: [],
     lastEventWeek: 0,
@@ -931,19 +950,21 @@ function computeModifiers(s) {
   for (const key in MINISTRIES) {
     if (s.ministriesActive[key]) {
       const e = MINISTRIES[key].effect;
-      mod.faithPerWeek += e.faithPerWeek || 0;
-      mod.reputationPerWeek += e.reputationPerWeek || 0;
-      mod.retentionBonus += e.retentionBonus || 0;
-      mod.visitorPerWeek += e.visitorPerWeek || 0;
+      const amult = staffAssignedTo(s, 'ministry', key) ? STAFF_ASSIGNMENT_MULT : 1;
+      mod.faithPerWeek += (e.faithPerWeek || 0) * amult;
+      mod.reputationPerWeek += (e.reputationPerWeek || 0) * amult;
+      mod.retentionBonus += (e.retentionBonus || 0) * amult;
+      mod.visitorPerWeek += (e.visitorPerWeek || 0) * amult;
     }
   }
   for (const key in DEPARTMENTS) {
     if (s.departmentsActive[key]) {
       const e = DEPARTMENTS[key].effect;
-      mod.faithPerWeek += e.faithPerWeek || 0;
-      mod.reputationPerWeek += e.reputationPerWeek || 0;
-      mod.retentionBonus += e.retentionBonus || 0;
-      mod.visitorPerWeek += e.visitorPerWeek || 0;
+      const amult = staffAssignedTo(s, 'department', key) ? STAFF_ASSIGNMENT_MULT : 1;
+      mod.faithPerWeek += (e.faithPerWeek || 0) * amult;
+      mod.reputationPerWeek += (e.reputationPerWeek || 0) * amult;
+      mod.retentionBonus += (e.retentionBonus || 0) * amult;
+      mod.visitorPerWeek += (e.visitorPerWeek || 0) * amult;
     }
   }
   const edu = BUILDINGS.education.levels[s.buildings.education];
@@ -1115,14 +1136,83 @@ function actionUpgradeBuilding(key) {
   render();
 }
 
+/* 담당 사역 배정 — 부교역자를 청빙할 때 어느 사역/부서를 맡길지 고른다(오너 지시).
+   이미 다른 사역자가 맡은 곳은 목록에서 빠지므로, 추가로 부교역자를 청빙할 때는
+   자연히 "남은" 사역/부서 중에서만 고르게 된다. */
+const STAFF_ASSIGNMENT_MULT = 1.4;
+
+function claimedAssignmentKeys(s) {
+  const claimed = new Set();
+  for (const roleKey in STAFF) {
+    const hired = s.staffHired[roleKey];
+    if (hired && hired.assignedTo) claimed.add(hired.assignedTo.type + ':' + hired.assignedTo.key);
+  }
+  return claimed;
+}
+
+function staffAssignedTo(s, type, key) {
+  for (const roleKey in STAFF) {
+    const hired = s.staffHired[roleKey];
+    if (hired && hired.assignedTo && hired.assignedTo.type === type && hired.assignedTo.key === key) return hired;
+  }
+  return null;
+}
+
+function assignmentLabel(assignedTo) {
+  if (!assignedTo) return null;
+  const def = assignedTo.type === 'ministry' ? MINISTRIES[assignedTo.key] : DEPARTMENTS[assignedTo.key];
+  return def ? def.name : null;
+}
+
 function actionHireCandidate(key, candidateIndex) {
   const def = STAFF[key];
   if (state.staffHired[key]) return;
   if (state.members < def.unlockMembers) return;
   const candidate = candidatesFor(key)[candidateIndex];
   if (!candidate) return;
-  state.staffHired[key] = Object.assign({ housing: false, hireWeek: state.week }, candidate);
-  addLog(`${def.name} ${candidate.name}을(를) 청빙했습니다.`);
+  showAssignmentPicker(key, candidate);
+}
+
+function showAssignmentPicker(staffKey, candidate) {
+  const claimed = claimedAssignmentKeys(state);
+  const options = [];
+  for (const k in MINISTRIES) {
+    if (MINISTRIES[k].unlock(state) && !claimed.has('ministry:' + k)) options.push({ type: 'ministry', key: k, name: MINISTRIES[k].name, icon: MINISTRIES[k].icon });
+  }
+  for (const k in DEPARTMENTS) {
+    if (DEPARTMENTS[k].unlock(state) && !claimed.has('department:' + k)) options.push({ type: 'department', key: k, name: DEPARTMENTS[k].name, icon: DEPARTMENTS[k].icon });
+  }
+
+  document.getElementById('eventIcon').textContent = '📋';
+  document.getElementById('eventTitle').textContent = `${candidate.name}에게 맡길 사역을 정해주세요`;
+  document.getElementById('eventBody').textContent =
+    `담당 사역·부서를 정하면 그 사역의 효과가 ${Math.round((STAFF_ASSIGNMENT_MULT - 1) * 100)}% 늘어납니다. 이미 다른 사역자가 맡고 있는 곳은 목록에 뜨지 않습니다.`;
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  options.forEach((opt) => {
+    const btn = el('button', 'choice-btn');
+    btn.innerHTML = `<span class="choice-label">${opt.icon} ${opt.name}</span>`;
+    btn.addEventListener('click', () => {
+      actionHireCandidateConfirmed(staffKey, candidate, { type: opt.type, key: opt.key });
+      hideModal('eventModal');
+    });
+    box.appendChild(btn);
+  });
+  const skip = el('button', 'choice-btn');
+  skip.innerHTML = `<span class="choice-label">나중에 정하기(담당 없이 청빙)</span>`;
+  skip.addEventListener('click', () => {
+    actionHireCandidateConfirmed(staffKey, candidate, null);
+    hideModal('eventModal');
+  });
+  box.appendChild(skip);
+  showModal('eventModal');
+}
+
+function actionHireCandidateConfirmed(key, candidate, assignedTo) {
+  const def = STAFF[key];
+  state.staffHired[key] = Object.assign({ housing: false, hireWeek: state.week, assignedTo }, candidate);
+  const label = assignmentLabel(assignedTo);
+  addLog(`${def.name} ${candidate.name}을(를) 청빙했습니다.${label ? ` (${label} 담당)` : ''}`);
   saveGame();
   render();
 }
@@ -1594,6 +1684,7 @@ function renderRoster() {
           <div class="card-title">${hired.name} <span class="card-level">${def.name}</span></div>
           <div class="card-sub">${genderLabel(hired.gender)}·${hired.age}세 · ${hired.family} · MBTI ${hired.mbti}</div>
           <div class="card-sub">주력: ${hired.styles.join('·')}${hired.housing ? ' · 사택 거주' : ''}</div>
+          <div class="card-sub">${assignmentLabel(hired.assignedTo) ? `담당: ${assignmentLabel(hired.assignedTo)}` : '담당 사역 없음'}</div>
         </div>
       </div>`;
     wrap.appendChild(card);
@@ -1658,6 +1749,7 @@ function renderStaff() {
             <div class="card-title">${def.name} · ${hired.name} <span class="card-level">${genderLabel(hired.gender)}·${hired.age}세</span></div>
             <div class="card-sub">${hired.family} · MBTI ${hired.mbti} · 주력: ${hired.styles.join('·')}</div>
             <div class="card-sub">"${hired.intro}"</div>
+            <div class="card-sub">${assignmentLabel(hired.assignedTo) ? `담당: ${assignmentLabel(hired.assignedTo)} (효과 +${Math.round((STAFF_ASSIGNMENT_MULT - 1) * 100)}%)` : '담당 사역 없음'}</div>
             <div class="card-sub">월 사례비 ${fmtWon(weeklySalary * 52 / 12)}${hired.housing ? ' (사택 제공 포함)' : ''}</div>
           </div>
         </div>
@@ -1951,7 +2043,7 @@ function actionBuyBoost(key) {
 /* ===================== 오프라인(자리비움) 진행 ===================== */
 /* 앱을 닫아둔 실제 시간만큼 교회는 계속 운영된다 — 모바일 타이쿤 게임의 핵심 관례. */
 
-const OFFLINE_SECONDS_PER_WEEK = 300;
+const OFFLINE_SECONDS_PER_WEEK = 60; // 실시간 자동진행(1분=1주)과 같은 속도로 맞춤 — 예전엔 5배 느려서 앱을 꺼두는 쪽이 오히려 손해였다
 const OFFLINE_MAX_WEEKS = 24;
 
 function applyOfflineProgress() {
