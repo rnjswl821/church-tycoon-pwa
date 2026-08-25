@@ -48,6 +48,40 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Splash screen — 링크로 처음 들어왔을 때 잠깐 보여주는 로고 화면 */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(160deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.35s ease;
+}
+.splash-screen.hidden { opacity: 0; pointer-events: none; }
+.splash-logo {
+  font-size: 64px;
+  animation: splashPop 0.5s ease;
+}
+.splash-title {
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+.splash-hint {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 4px;
+}
+@keyframes splashPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* Topbar */
 .topbar {
   display: flex;
@@ -95,6 +129,15 @@ body {
   color: var(--ink-soft);
   white-space: nowrap;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.topbar-date {
+  font-size: 9px;
+  color: var(--ink-soft);
+  opacity: 0.75;
 }
 
 /* Scene */

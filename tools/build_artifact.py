@@ -31,12 +31,12 @@ with open(os.path.join(D, "index.html"), encoding="utf-8") as f:
 
 body_match = re.search(r'<div id="app">.*?</div>\s*</div>\s*<div id="eventModal".*?</div>\s*</div>\s*<div id="milestoneModal".*?</div>\s*</div>', html, re.S)
 # Simpler: grab everything between <body> and the first <script
-body_start = html.index('<div id="app">')
+body_start = html.index('<div id="splashScreen"')
 body_end = html.index('<script src="scene.js">')
 body_content = html[body_start:body_end].strip()
 
-title = "교회 경영 시뮬레이션"
-description_meta = '<meta name="description" content="교회를 세우고 성도를 섬기며 함께 성장시키는 픽셀아트 경영 시뮬레이션 게임">'
+title = "목회타이쿤"
+description_meta = '<meta name="description" content="교회를 세우고 성도를 섬기며 함께 성장시키는 목회 경영 시뮬레이션 게임">'
 
 sprite_json = json.dumps(sprite_data, ensure_ascii=False)
 

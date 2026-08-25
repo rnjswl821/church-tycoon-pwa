@@ -1,4 +1,4 @@
-const CACHE_NAME = 'church-tycoon-v5';
+const CACHE_NAME = 'church-tycoon-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -8,7 +8,7 @@ const ASSETS = [
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
-  ...[0, 1, 2, 3, 4, 5].map((i) => `./assets/sanctuary_${i}.png`),
+  ...[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => `./assets/sanctuary_${i}.png`),
   ...[0, 1, 2, 3, 4].map((i) => `./assets/education_${i}.png`),
   ...[0, 1, 2, 3, 4].map((i) => `./assets/fellowship_${i}.png`),
   ...[0, 1, 2, 3].map((i) => `./assets/parking_${i}.png`),
@@ -18,6 +18,7 @@ const ASSETS = [
   './assets/icon_reputation.png', './assets/icon_volunteers.png',
   './assets/grass_0.png', './assets/grass_1.png', './assets/path_0.png',
   './assets/tree_0.png', './assets/tree_1.png', './assets/bush_0.png',
+  './assets/fence_0.png', './assets/flower_bed_0.png',
 ];
 
 self.addEventListener('install', (event) => {

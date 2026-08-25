@@ -18,7 +18,7 @@ const Scene = (function () {
     bush0: 'bush_0.png',
     fence0: 'fence_0.png',
     flowerBed0: 'flower_bed_0.png',
-    sanctuary: [0, 1, 2, 3, 4, 5].map((i) => `sanctuary_${i}.png`),
+    sanctuary: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => `sanctuary_${i}.png`),
     education: [0, 1, 2, 3, 4].map((i) => `education_${i}.png`),
     fellowship: [0, 1, 2, 3, 4].map((i) => `fellowship_${i}.png`),
     parking: [0, 1, 2, 3].map((i) => `parking_${i}.png`),

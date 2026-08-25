@@ -24,6 +24,7 @@ const TIERS = [
 const EVENT_TIER_SPROUT = 30;
 const EVENT_TIER_FRUIT = 100;
 const EVENT_TIER_TREE = 300;
+const EVENT_TIER_MEGA = 1000;
 
 /* 성장 단계 100레벨(오너 지시) — 위 5개 시대(TIERS)의 이름·마일스톤 대사는 그대로 두고,
    그 안을 성도수 기준 100단계로 잘게 나눈 "보조 눈금"이다. 이벤트 해금 등 게임 로직은
@@ -33,11 +34,11 @@ const EVENT_TIER_TREE = 300;
 const LEVELS = (function () {
   /* Lv.1→Lv.2는 성도 15명(오너 확정 — 새 게임 시작 성도수 12명보다 확실히 위).
      그 뒤로는 레벨마다 요구 증가폭 자체가 점점 커지는 등차수열이라 "갈수록 어려워지는"
-     체감 곡선이 된다(레벨100 ≈ 성도 2,500명대). */
+     체감 곡선이 된다(레벨100 ≈ 성도 9,600명대 — 오너 지시로 최대 1만명 규모까지 확장). */
   const arr = [{ level: 1, min: 0 }, { level: 2, min: 15 }];
   let cur = 15;
   let gap = 1;
-  const GAP_GROWTH = 0.5;
+  const GAP_GROWTH = 2.0; // Lv.100 ≈ 9,600명대(오너 지시 — 최대 1만명 교회까지 성장)
   for (let lvl = 3; lvl <= 100; lvl++) {
     cur += Math.round(gap);
     arr.push({ level: lvl, min: cur });
@@ -66,7 +67,10 @@ const BUILDINGS = {
       { cap: 200,  cost: 35000000 },
       { cap: 400,  cost: 90000000 },
       { cap: 800,  cost: 220000000 },
-      { cap: 1600, cost: 550000000 },
+      { cap: 1600,  cost: 550000000 },
+      { cap: 3200,  cost: 1400000000 },
+      { cap: 6000,  cost: 3200000000 },
+      { cap: 10500, cost: 7500000000 },
     ],
     statLine: (lv) => `정원 ${BUILDINGS.sanctuary.levels[lv].cap}명`,
   },
@@ -353,6 +357,24 @@ const CAMPAIGNS = {
     },
   },
 };
+
+/* 시간 가속권 — 자동진행 속도를 한시적으로 높이는 소모 아이템 3종(오너 지시). 획득처는
+   두 갈래: ① 성장 단계(TIERS)가 오를 때마다 자동 지급(초반 단계는 소, 후반 단계는 대 —
+   플레이가 진행될수록 더 큰 보상), ② 교회 재정으로 즉시 구매(행사 탭). 사용 중에는 중첩 없이
+   하나만 활성화된다(동시에 여러 배속이 겹치는 혼란 방지). */
+const BOOST_ITEMS = {
+  small:  { name: '가속권(소)', icon: '⏱️', mult: 2, durationMs: 20 * 60 * 1000, cost: 2000000,  desc: '20분 동안 시간의 흐름이 2배 빨라집니다.' },
+  medium: { name: '가속권(중)', icon: '⏰', mult: 3, durationMs: 30 * 60 * 1000, cost: 6000000,  desc: '30분 동안 시간의 흐름이 3배 빨라집니다.' },
+  large:  { name: '가속권(대)', icon: '⌛', mult: 5, durationMs: 30 * 60 * 1000, cost: 15000000, desc: '30분 동안 시간의 흐름이 5배 빨라집니다.' },
+};
+/* 성장 단계(TIERS, 총 10단계)를 3구간으로 나눠 초반엔 소, 중반엔 중, 후반엔 대를 지급한다. */
+function boostGrantFor(tierKey) {
+  const idx = TIERS.findIndex((t) => t.key === tierKey);
+  if (idx < 0) return null;
+  if (idx <= 2) return 'small';
+  if (idx <= 6) return 'medium';
+  return 'large';
+}
 
 /* 선택지는 항상 4개, 그리고 각 선택지 안에 오르는 값과 내리는 값을 함께 넣어
    "공짜로 좋기만 한" 선택지가 없도록 설계했다(신중한 선택 유도). 효과는 선택 전에는
@@ -656,6 +678,51 @@ const EVENTS = [
         apply: (s) => { s.fund += 30000; s.faith = clamp(s.faith - 1, 0, 100); return '비좁은 교실에 대한 불만이 조금씩 쌓였습니다.'; } },
     ],
   },
+  {
+    id: 'growth_plateau', icon: '📊', title: '성도수가 제자리걸음입니다',
+    body: '건물도 사역도 늘었는데, 정작 새가족은 눈에 띄게 늘지 않고 있습니다. 지역에 우리 교회 이야기가 잘 퍼지지 않는 듯합니다.',
+    available: (s) => s.members >= EVENT_TIER_FRUIT && s.reputation < 55,
+    choices: [
+      { label: '지역 신뢰 회복을 위한 전면적인 섬김 캠페인을 시작한다',
+        apply: (s) => { s.fund -= 700000; s.reputation = clamp(s.reputation + 8, 0, 100); return '적극적인 섬김에 지역의 시선이 달라지기 시작했습니다.'; } },
+      { label: '이웃과의 접점을 늘리는 작은 캠페인을 시작한다',
+        apply: (s) => { s.fund -= 250000; s.reputation = clamp(s.reputation + 4, 0, 100); return '작지만 꾸준한 노력이 조금씩 소문나기 시작했습니다.'; } },
+      { label: '기존 성도들에게 입소문을 부탁한다',
+        apply: (s) => { s.fund -= 30000; s.reputation = clamp(s.reputation + 1, 0, 100); return '성도들의 자발적인 입소문이 작은 보탬이 되었습니다.'; } },
+      { label: '내실을 다지며 때를 기다린다',
+        apply: (s) => { s.reputation = clamp(s.reputation - 2, 0, 100); return '뚜렷한 변화 없이 정체가 계속되었습니다.'; } },
+    ],
+  },
+  {
+    id: 'financial_scandal', icon: '📰', title: '재정 운용에 대한 의혹이 제기되었습니다',
+    body: '일부 성도들 사이에서 헌금 사용처가 불투명하다는 소문이 돌기 시작했습니다. 대응을 늦추면 신뢰가 크게 흔들릴 수 있습니다.',
+    available: (s) => s.members >= EVENT_TIER_TREE,
+    choices: [
+      { label: '외부 회계법인에 전면 감사를 의뢰하고 결과를 공개한다',
+        apply: (s) => { s.fund -= 600000; s.reputation = clamp(s.reputation + 5, 0, 100); s.faith = clamp(s.faith + 2, 0, 100); return '투명한 감사 결과 공개에 오히려 신뢰가 더 두터워졌습니다.'; } },
+      { label: '제직회 명의로 재정 내역을 상세히 공개한다',
+        apply: (s) => { s.fund -= 100000; s.reputation = clamp(s.reputation + 2, 0, 100); return '성실한 공개에 대부분의 의혹이 해소되었습니다.'; } },
+      { label: '짧은 해명 공지만 낸다',
+        apply: (s) => { s.fund -= 20000; s.reputation = clamp(s.reputation - 1, 0, 100); return '해명이 부족했는지 의혹이 완전히 가시지는 않았습니다.'; } },
+      { label: '근거 없는 소문이라며 대응하지 않는다',
+        apply: (s) => { s.reputation = clamp(s.reputation - 6, 0, 100); s.faith = clamp(s.faith - 2, 0, 100); return '침묵이 오히려 의혹을 키워 신뢰가 크게 흔들렸습니다.'; } },
+    ],
+  },
+  {
+    id: 'schism_risk', icon: '⚡', title: '내부 분열의 조짐이 보입니다',
+    body: '교회가 커지면서 방향성을 둘러싼 의견 차이가 깊어졌습니다. 일부 성도들이 따로 모임을 만들려 한다는 이야기까지 들려옵니다.',
+    available: (s) => s.members >= EVENT_TIER_MEGA,
+    choices: [
+      { label: '당회를 소집해 며칠간 집중적으로 중재하고 화해를 이끈다',
+        apply: (s) => { s.fund -= 800000; s.faith = clamp(s.faith + 4, 0, 100); return '진심 어린 중재 끝에 공동체가 다시 하나로 모였습니다.'; } },
+      { label: '전 성도가 참여하는 공개 대화의 시간을 마련한다',
+        apply: (s) => { s.fund -= 300000; s.faith = clamp(s.faith + 2, 0, 100); s.memberFrac = Math.max(0, s.memberFrac - 3); s.members = Math.floor(s.memberFrac); return '대화로 큰 갈등은 풀렸지만, 몇몇은 이미 마음이 떠나 있었습니다.'; } },
+      { label: '당회에 조용히 수습을 맡긴다',
+        apply: (s) => { s.fund -= 50000; s.memberFrac = Math.max(0, s.memberFrac - 8); s.members = Math.floor(s.memberFrac); return '조용한 수습이었지만 적지 않은 성도가 떠났습니다.'; } },
+      { label: '시간이 지나면 가라앉으리라 믿고 지켜본다',
+        apply: (s) => { s.faith = clamp(s.faith - 3, 0, 100); s.memberFrac = Math.max(0, s.memberFrac - 20); s.members = Math.floor(s.memberFrac); return '갈등이 곪아 터지며 적지 않은 성도들이 교회를 떠나고 말았습니다.'; } },
+    ],
+  },
 ];
 
 /* 고신총회 헌법 2부 관리표준(제63~84조·제108~109조) 근거 — 권징(재판·시벌) 절차는
@@ -721,6 +788,19 @@ function formatChurchAge(week) {
   return `개척 ${years}년 ${months}개월`;
 }
 
+/* 절대 시간 표기 — "개척 00년 00개월"은 게임 내 상대 나이고, 이건 실제로 게임을 시작한
+   달력 날짜(gameStartDate)에서 경과 주 수만큼 흘려 계산한 게임 속 달력 날짜다(오너 지시).
+   게임 속 시간 흐름 속도만큼(자동진행 간격 등) 이 날짜도 함께 빨리 흐른다. */
+function formatAbsoluteDate(s) {
+  const start = new Date(s.gameStartDate + 'T00:00:00');
+  const elapsedWeeks = Math.max(0, s.week - 1);
+  const d = new Date(start.getTime() + elapsedWeeks * 7 * 24 * 60 * 60 * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}.${m}.${day}`;
+}
+
 function currentTier(members) {
   let t = TIERS[0];
   for (const tier of TIERS) if (members >= tier.min) t = tier;
@@ -755,9 +835,14 @@ function newGame(name) {
     financialCrisisWeeks: 0,
     lastSavedAt: Date.now(),
     endingShown: false,
+    boostItems: { small: 0, medium: 0, large: 0 },
+    speedBoostKey: null, speedBoostMultiplier: 1, speedBoostUntil: 0,
+    gameStartDate: new Date().toISOString().slice(0, 10), // 절대 시간 표기의 기준점(게임을 실제로 시작한 날짜)
   };
 }
 
+let isFirstEverLaunch = true;
+try { isFirstEverLaunch = !localStorage.getItem(STORAGE_KEY); } catch (e) { /* ignore */ }
 let state = loadGame() || newGame();
 let currentTab = 'dashboard';
 
@@ -774,6 +859,11 @@ function loadGame() {
     if (!s.lastSavedAt) s.lastSavedAt = Date.now();
     if (!s.departmentsActive) s.departmentsActive = {};
     if (!s.candidateGen) s.candidateGen = {};
+    if (!s.boostItems) s.boostItems = { small: 0, medium: 0, large: 0 };
+    if (typeof s.speedBoostMultiplier !== 'number') s.speedBoostMultiplier = 1;
+    if (typeof s.speedBoostUntil !== 'number') s.speedBoostUntil = 0;
+    if (typeof s.speedBoostKey === 'undefined') s.speedBoostKey = null;
+    if (!s.gameStartDate) s.gameStartDate = new Date().toISOString().slice(0, 10);
     for (const k of ['elder', 'deacon', 'exhorter']) {
       if (typeof s.officers[k] === 'number') {
         const n = s.officers[k];
@@ -931,8 +1021,14 @@ function advanceWeek() {
   const prevRep = s.reputation;
   s.reputation = clamp(s.reputation + mod.reputationPerWeek - repDecay, 0, 100);
 
+  /* 입소문 효과 — 지역신뢰가 높을수록 "성도가 성도를 부르는" 유입이 성도수에 비례해 붙는다.
+     지역신뢰가 낮으면 이 항이 작아 이탈률(churn, 0.006/주 하한)을 못 넘어서고, 지역신뢰가
+     충분히 높아야 비로소 순유입이 되어 대형교회 규모(만 명 단위)까지 자랄 수 있다 — 시설만
+     불려서는 못 크고 반드시 지역신뢰 투자가 있어야 하는 구조(오너 지시: 1만명까지 성장 가능,
+     레벨100 밸런스에 맞출 것). */
+  const wordOfMouthRate = 0.007;
   const roomLeft = Math.max(0, sanctuaryCap - s.members);
-  let visitors = neglected ? 0 : 0.4 + s.reputation * 0.045 + mod.visitorPerWeek;
+  let visitors = neglected ? 0 : 0.4 + s.reputation * 0.045 + mod.visitorPerWeek + s.memberFrac * (s.reputation / 100) * wordOfMouthRate;
   if (roomLeft <= 0) visitors = 0;
   else visitors = Math.min(visitors, roomLeft + 2);
 
@@ -954,18 +1050,22 @@ function advanceWeek() {
 
   const tier = currentTier(s.members);
   let milestone = null;
+  let grantedBoost = null;
   if (tier.key !== s.tierReached && TIERS.findIndex((t) => t.key === tier.key) > TIERS.findIndex((t) => t.key === s.tierReached)) {
     s.tierReached = tier.key;
     milestone = tier;
+    grantedBoost = boostGrantFor(tier.key);
+    if (grantedBoost) s.boostItems[grantedBoost] = (s.boostItems[grantedBoost] || 0) + 1;
   }
 
-  addLog(`${fmtWon(income)} 운영기금 수입, ${fmtWon(upkeep)} 사역과 사례비 지출 (순 ${net >= 0 ? '+' : ''}${fmtWon(net)})`);
+  addLog(`${fmtWon(income)} 교회 재정 수입, ${fmtWon(upkeep)} 사역과 사례비 지출 (순 ${net >= 0 ? '+' : ''}${fmtWon(net)})`);
   if (neglected) addLog(`사역·직분자 없이 방치되어 관리비 ${fmtWon(neglectOverhead)}가 새고, 신앙지수·지역신뢰가 평소보다 빠르게 떨어졌습니다.`);
   if (crisisNote) addLog(crisisNote);
   if (officerTermNote) addLog(officerTermNote);
+  if (grantedBoost) addLog(`${tier.name} 성장을 축하하며 ${BOOST_ITEMS[grantedBoost].name}을(를) 받았습니다.`);
 
   return {
-    income, upkeep, net, neglected, neglectOverhead,
+    income, upkeep, net, neglected, neglectOverhead, grantedBoost,
     faithDelta: +(s.faith - prevFaith).toFixed(1),
     repDelta: +(s.reputation - prevRep).toFixed(1),
     memberDelta: s.members - prevMembers,
@@ -1026,6 +1126,15 @@ function actionReleaseStaff(key) {
   if (!state.candidateGen) state.candidateGen = {};
   state.candidateGen[key] = (state.candidateGen[key] || 0) + 1;
   addLog(`${def.name} ${hired.name}와(과) 아쉬운 작별을 했습니다.`);
+  saveGame();
+  render();
+}
+
+function actionRerollCandidates(key) {
+  if (state.staffHired[key]) return;
+  if (!state.candidateGen) state.candidateGen = {};
+  state.candidateGen[key] = (state.candidateGen[key] || 0) + 1;
+  addLog(`${STAFF[key].name} 후보자 명단을 새로 받아보았습니다.`);
   saveGame();
   render();
 }
@@ -1130,7 +1239,7 @@ function actionNextWeek() {
     saveGame();
     showEnding();
   } else if (summary.milestone) {
-    showMilestone(summary.milestone);
+    showMilestone(summary.milestone, summary.grantedBoost);
   } else if (state.week - (state.lastEventWeek || 0) >= EVENT_MIN_GAP_WEEKS && Math.random() < EVENT_TRIGGER_PROB) {
     const ev = pickEvent();
     if (ev) {
@@ -1153,6 +1262,7 @@ function actionResetGame() {
 function render() {
   document.getElementById('churchName').value = state.name;
   document.getElementById('weekLabel').textContent = formatChurchAge(state.week);
+  setStat('dateLabel', formatAbsoluteDate(state));
   const tier = currentTier(state.members);
   const lvl = currentLevel(state.members);
   document.getElementById('tierBadge').textContent = `${tier.name} · Lv.${lvl.level}`;
@@ -1200,6 +1310,16 @@ function renderDashboard() {
     <div class="dash-summary" id="dashSummary">${summaryInner}</div>`;
   wrap.appendChild(sumCard);
 
+  const officerMax = officerMaxFor(state);
+  const officerCounts = { elder: (state.officers.elder || []).length, deacon: (state.officers.deacon || []).length, exhorter: (state.officers.exhorter || []).length };
+  const officerVacant = officerCounts.elder < officerMax || officerCounts.deacon < officerMax || officerCounts.exhorter < officerMax;
+  const officerCard = el('div', 'card');
+  officerCard.innerHTML = `
+    <div class="card-title">🧑‍🤝‍🧑 직분자 현황</div>
+    <div class="card-sub">장로 ${officerCounts.elder}/${officerMax} · 집사 ${officerCounts.deacon}/${officerMax} · 권사 ${officerCounts.exhorter}/${officerMax}</div>
+    ${officerVacant ? `<div class="card-sub">공석이 있습니다 — '사역자' 탭에서 임직할 수 있습니다(임기 2년).</div>` : ''}`;
+  wrap.appendChild(officerCard);
+
   const tier = currentTier(state.members);
   const nt = nextTier(state.members);
   const lvl = currentLevel(state.members);
@@ -1221,7 +1341,7 @@ function renderDashboard() {
 
 function renderCampaigns() {
   const wrap = el('div');
-  wrap.appendChild(el('div', 'section-title', '행사 — 한 번의 운영기금으로 큰 변화를'));
+  wrap.appendChild(el('div', 'section-title', '행사 — 한 번의 교회 재정으로 큰 변화를'));
   for (const key in CAMPAIGNS) {
     const def = CAMPAIGNS[key];
     const card = el('div', 'card');
@@ -1240,6 +1360,39 @@ function renderCampaigns() {
     wrap.appendChild(card);
   }
   wrap.querySelectorAll('[data-campaign]').forEach((b) => b.addEventListener('click', () => actionCampaign(b.dataset.campaign)));
+
+  wrap.appendChild(el('div', 'section-title', '가속권 — 시간의 흐름을 한시적으로 빠르게'));
+  const boosting = currentSpeedMultiplier() > 1;
+  if (boosting) {
+    const remainMin = Math.max(0, Math.ceil((state.speedBoostUntil - Date.now()) / 60000));
+    const activeCard = el('div', 'card');
+    activeCard.innerHTML = `<div class="card-title">${BOOST_ITEMS[state.speedBoostKey].icon} ${BOOST_ITEMS[state.speedBoostKey].name} 사용 중</div>
+      <div class="card-sub">${state.speedBoostMultiplier}배속 · ${remainMin}분 남음 (끝날 때까지 다른 가속권을 겹쳐 쓸 수 없습니다)</div>`;
+    wrap.appendChild(activeCard);
+  }
+  for (const key in BOOST_ITEMS) {
+    const def = BOOST_ITEMS[key];
+    const owned = (state.boostItems && state.boostItems[key]) || 0;
+    const afford = state.fund >= def.cost;
+    const card = el('div', 'card');
+    card.innerHTML = `
+      <div class="card-row">
+        <div class="card-emoji">${def.icon}</div>
+        <div class="card-main">
+          <div class="card-title">${def.name} <span class="card-level">보유 ${owned}개</span></div>
+          <div class="card-sub">${def.desc}</div>
+          <div class="card-sub">성장 단계 도달 시 자동 지급 · 직접 구매 가능</div>
+        </div>
+      </div>
+      <div class="card-row" style="margin-top:8px; gap:6px">
+        <button class="btn btn-outline btn-small" ${owned > 0 && !boosting ? '' : 'disabled'} data-use-boost="${key}">사용하기</button>
+        <button class="btn btn-ghost btn-small" ${afford ? '' : 'disabled'} data-buy-boost="${key}">구매 ${fmtWon(def.cost)}</button>
+      </div>`;
+    wrap.appendChild(card);
+  }
+  wrap.querySelectorAll('[data-use-boost]').forEach((b) => b.addEventListener('click', () => actionUseBoost(b.dataset.useBoost)));
+  wrap.querySelectorAll('[data-buy-boost]').forEach((b) => b.addEventListener('click', () => actionBuyBoost(b.dataset.buyBoost)));
+
   return wrap;
 }
 
@@ -1255,7 +1408,7 @@ function summaryDeltaText(v) {
 
 function buildSummaryRowsHtml(summary) {
   const rows = [];
-  rows.push(summaryRow('운영기금 수입', `+${fmtWon(summary.income)}`, 'pos'));
+  rows.push(summaryRow('교회 재정 수입', `+${fmtWon(summary.income)}`, 'pos'));
   rows.push(summaryRow('사역과 사례비 지출', `-${fmtWon(summary.upkeep)}`, 'neg'));
   if (summary.neglected) rows.push(summaryRow('방치 관리비', `-${fmtWon(summary.neglectOverhead)}`, 'neg'));
   rows.push(summaryRow('순 증감', `${summary.net >= 0 ? '+' : ''}${fmtWon(summary.net)}`, summary.net >= 0 ? 'pos' : 'neg'));
@@ -1461,7 +1614,14 @@ function renderStaff() {
     } else {
       const wrap2 = el('div', 'card');
       const cands = candidatesFor(key);
-      wrap2.innerHTML = `<div class="card-title">${def.icon} ${def.name} 후보자 ${cands.length}명</div><div class="card-sub">${def.desc}</div>`;
+      wrap2.innerHTML = `
+        <div class="card-row">
+          <div class="card-main">
+            <div class="card-title">${def.icon} ${def.name} 후보자 ${cands.length}명</div>
+            <div class="card-sub">${def.desc}</div>
+          </div>
+          <div class="card-action"><button class="btn btn-ghost btn-small" data-reroll="${key}">다른 후보 보기</button></div>
+        </div>`;
       wrap.appendChild(wrap2);
       cands.forEach((c, i) => {
         const monthlyAsk = Math.round((def.baseMonthlySalary * c.salaryFactor) / 10000) * 10000;
@@ -1481,6 +1641,7 @@ function renderStaff() {
     }
   }
   wrap.querySelectorAll('[data-candidate-hire]').forEach((b) => b.addEventListener('click', () => actionHireCandidate(b.dataset.candidateHire, Number(b.dataset.candidateIdx))));
+  wrap.querySelectorAll('[data-reroll]').forEach((b) => b.addEventListener('click', () => actionRerollCandidates(b.dataset.reroll)));
   wrap.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', () => actionReleaseStaff(b.dataset.release)));
   wrap.querySelectorAll('[data-housing]').forEach((b) => b.addEventListener('change', () => actionToggleHousing(b.dataset.housing)));
 
@@ -1571,7 +1732,7 @@ function showEventResult(ev, msg, before, after) {
   box.innerHTML = '';
 
   const deltas = [
-    ['운영기금', after.fund - before.fund, 'won'],
+    ['교회 재정', after.fund - before.fund, 'won'],
     ['성도수', after.members - before.members, 'count'],
     ['신앙지수', +(after.faith - before.faith).toFixed(1), 'num'],
     ['지역신뢰', +(after.reputation - before.reputation).toFixed(1), 'num'],
@@ -1594,9 +1755,10 @@ function showEventResult(ev, msg, before, after) {
   box.appendChild(okBtn);
 }
 
-function showMilestone(tier) {
+function showMilestone(tier, grantedBoost) {
   document.getElementById('milestoneTitle').textContent = `${tier.name}(으)로 성장했습니다!`;
-  document.getElementById('milestoneBody').textContent = tier.msg;
+  document.getElementById('milestoneBody').textContent = tier.msg +
+    (grantedBoost ? `\n\n🎁 ${BOOST_ITEMS[grantedBoost].name}을(를) 받았습니다! '행사' 탭에서 사용할 수 있습니다.` : '');
   document.getElementById('milestoneCloseBtn').textContent = '계속하기';
   showModal('milestoneModal');
 }
@@ -1609,7 +1771,7 @@ function showEnding() {
   document.getElementById('milestoneBody').textContent =
     `${finalTier.msg} 작은 씨앗 하나로 시작한 교회가 ${state.week}주 동안의 여정 끝에 ` +
     `성도 ${fmt(state.members)}명이 함께하는 ${finalTier.name}이(가) 되었습니다.\n\n` +
-    `— 운영기금 ${fmtWon(state.fund)}\n` +
+    `— 교회 재정 ${fmtWon(state.fund)}\n` +
     `— 건물 레벨 합계 ${buildingLevels}단계\n` +
     `— 임직한 직분자 ${officerCount}명\n` +
     `— 신앙지수 ${Math.round(state.faith)} · 지역신뢰 ${Math.round(state.reputation)}\n\n` +
@@ -1638,33 +1800,74 @@ function initTabs() {
 
 let autoPlayOn = false;
 let autoPlayTimer = null;
-const AUTO_PLAY_INTERVAL_MS = Math.round((10 * 60 * 1000) / WEEKS_PER_MONTH); // 10분 = 게임 속 1개월
+const AUTO_PLAY_INTERVAL_MS = Math.round((5 * 60 * 1000) / WEEKS_PER_MONTH); // 5분 = 게임 속 1개월(오너 지시로 2배 가속)
 
 function isAnyModalOpen() {
   const em = document.getElementById('eventModal');
   const mm = document.getElementById('milestoneModal');
-  return (em && !em.classList.contains('hidden')) || (mm && !mm.classList.contains('hidden'));
+  const im = document.getElementById('introModal');
+  return (em && !em.classList.contains('hidden')) || (mm && !mm.classList.contains('hidden')) || (im && !im.classList.contains('hidden'));
+}
+
+/* 활성화된 가속권이 있으면 그 배수만큼 틱 간격을 줄인다 — setInterval을 고정하지 않고
+   매 틱마다 다시 스케줄링해서, 가속권을 새로 쓰면 다음 틱부터 바로 빨라지게 했다. */
+function currentSpeedMultiplier() {
+  if (state.speedBoostUntil && Date.now() < state.speedBoostUntil) return state.speedBoostMultiplier || 1;
+  if (state.speedBoostUntil) { state.speedBoostUntil = 0; state.speedBoostMultiplier = 1; state.speedBoostKey = null; }
+  return 1;
 }
 
 function updateAutoPlayButton() {
   const btn = document.getElementById('autoToggleBtn');
   if (!btn) return;
-  btn.textContent = autoPlayOn ? '⏸ 시간이 흐르는 중' : '▶ 일시정지됨 (탭해서 계속)';
+  const mult = currentSpeedMultiplier();
+  const boostSuffix = mult > 1 ? ` · ${mult}배속(${Math.max(0, Math.ceil((state.speedBoostUntil - Date.now()) / 60000))}분 남음)` : '';
+  btn.textContent = (autoPlayOn ? '⏸ 시간이 흐르는 중' : '▶ 일시정지됨 (탭해서 계속)') + boostSuffix;
   btn.classList.toggle('btn-primary', autoPlayOn);
   btn.classList.toggle('btn-outline', !autoPlayOn);
   btn.setAttribute('aria-pressed', autoPlayOn ? 'true' : 'false');
+}
+
+function scheduleAutoTick() {
+  if (autoPlayTimer) { clearTimeout(autoPlayTimer); autoPlayTimer = null; }
+  if (!autoPlayOn) return;
+  const interval = Math.max(500, Math.round(AUTO_PLAY_INTERVAL_MS / currentSpeedMultiplier()));
+  autoPlayTimer = setTimeout(() => {
+    if (!isAnyModalOpen()) actionNextWeek();
+    scheduleAutoTick();
+  }, interval);
 }
 
 function setAutoPlay(on) {
   autoPlayOn = on;
   try { localStorage.setItem('church-tycoon-autoplay', on ? '1' : '0'); } catch (e) { /* ignore */ }
   updateAutoPlayButton();
-  if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
-  if (on) {
-    autoPlayTimer = setInterval(() => {
-      if (!isAnyModalOpen()) actionNextWeek();
-    }, AUTO_PLAY_INTERVAL_MS);
-  }
+  scheduleAutoTick();
+}
+
+function actionUseBoost(key) {
+  if (currentSpeedMultiplier() > 1) return; // 이미 가속 중엔 중첩 사용 불가
+  if (!state.boostItems[key]) return;
+  const def = BOOST_ITEMS[key];
+  state.boostItems[key] -= 1;
+  state.speedBoostKey = key;
+  state.speedBoostMultiplier = def.mult;
+  state.speedBoostUntil = Date.now() + def.durationMs;
+  addLog(`${def.name}을(를) 사용해 ${def.mult}배속으로 시간이 흐릅니다.`);
+  saveGame();
+  render();
+  updateAutoPlayButton();
+  if (autoPlayOn) scheduleAutoTick();
+}
+
+function actionBuyBoost(key) {
+  const def = BOOST_ITEMS[key];
+  if (state.fund < def.cost) return;
+  state.fund -= def.cost;
+  state.boostItems[key] = (state.boostItems[key] || 0) + 1;
+  addLog(`${def.name}을(를) 구매했습니다.`);
+  saveGame();
+  render();
 }
 
 /* ===================== 오프라인(자리비움) 진행 ===================== */
@@ -1683,8 +1886,10 @@ function applyOfflineProgress() {
 
   const before = snapshotStats(state);
   let reachedEnding = false;
+  const boostsGranted = {};
   for (let i = 0; i < weeks; i++) {
     const summary = advanceWeek();
+    if (summary.grantedBoost) boostsGranted[summary.grantedBoost] = (boostsGranted[summary.grantedBoost] || 0) + 1;
     if (summary.milestone && summary.milestone.key === TIERS[TIERS.length - 1].key && !state.endingShown) {
       state.endingShown = true;
       reachedEnding = true;
@@ -1692,18 +1897,21 @@ function applyOfflineProgress() {
   }
   const after = snapshotStats(state);
   saveGame();
-  return { weeks, before, after, reachedEnding };
+  return { weeks, before, after, reachedEnding, boostsGranted };
 }
 
 function showOfflineSummary(result) {
   if (result.reachedEnding) { showEnding(); return; }
   document.getElementById('eventIcon').textContent = '⏳';
   document.getElementById('eventTitle').textContent = `자리를 비운 사이 ${result.weeks}주가 지났습니다`;
-  document.getElementById('eventBody').textContent = '떠나 있는 동안에도 교회는 계속 운영되었습니다.';
+  const boostText = Object.keys(result.boostsGranted || {})
+    .map((k) => `${BOOST_ITEMS[k].name} ${result.boostsGranted[k]}개`).join(', ');
+  document.getElementById('eventBody').textContent = '떠나 있는 동안에도 교회는 계속 운영되었습니다.' +
+    (boostText ? ` (성장 보상으로 ${boostText}을(를) 받았습니다)` : '');
   const box = document.getElementById('eventChoices');
   box.innerHTML = '';
   const deltas = [
-    ['운영기금', result.after.fund - result.before.fund, 'won'],
+    ['교회 재정', result.after.fund - result.before.fund, 'won'],
     ['성도수', result.after.members - result.before.members, 'count'],
     ['신앙지수', +(result.after.faith - result.before.faith).toFixed(1), 'num'],
     ['지역신뢰', +(result.after.reputation - result.before.reputation).toFixed(1), 'num'],
@@ -1759,6 +1967,7 @@ function initFooter() {
     try { saved = localStorage.getItem('church-tycoon-autoplay'); } catch (e) { /* ignore */ }
     setAutoPlay(saved === null ? true : saved === '1');
   }
+  setInterval(updateAutoPlayButton, 5000); // 가속권 잔여시간 표시를 주기적으로 갱신
 }
 
 function showConfirmReset() {
@@ -1844,19 +2053,48 @@ function initPwa() {
   }
 }
 
-function init() {
-  initTabs();
-  initFooter();
-  initChurchNameInput();
-  initMilestoneModal();
-  initScene();
-  initPwa();
+/* 링크로 처음 들어왔을 때: 로고 스플래시 → (첫 실행이면) 간단한 게임 소개 확인창 →
+   게임 시작. 기존 저장 데이터가 있는 재방문자는 스플래시만 잠깐 보고 바로 이어서 한다. */
+function startGamePlay() {
   render();
   const off = applyOfflineProgress();
   if (off) {
     render();
     showOfflineSummary(off);
   }
+}
+
+function dismissSplash() {
+  const splash = document.getElementById('splashScreen');
+  if (!splash || splash.classList.contains('hidden')) return;
+  splash.classList.add('hidden');
+  setTimeout(() => { splash.style.display = 'none'; }, 400);
+  if (isFirstEverLaunch) showModal('introModal');
+  else startGamePlay();
+}
+
+function initSplash() {
+  const splash = document.getElementById('splashScreen');
+  if (!splash) { if (isFirstEverLaunch) showModal('introModal'); else startGamePlay(); return; }
+  splash.addEventListener('click', dismissSplash);
+  setTimeout(dismissSplash, 1400);
+}
+
+function initIntro() {
+  const btn = document.getElementById('introStartBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => { hideModal('introModal'); startGamePlay(); });
+}
+
+function init() {
+  initTabs();
+  initFooter();
+  initChurchNameInput();
+  initMilestoneModal();
+  initIntro();
+  initScene();
+  initPwa();
+  initSplash();
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -44,14 +44,14 @@ GLASS_G  = (118, 179, 120, 255)
 
 def sanctuary(level):
     # bottom-up explicit layout so nothing gets clipped off the top of canvas
-    body_w  = [20, 24, 28, 28, 30, 32][level]
-    body_h  = [14, 16, 17, 19, 20, 21][level]
-    roof_h  = [10, 11, 12, 13, 14, 15][level]
-    tower_h = [0, 0, 10, 12, 13, 15][level]
-    spire_h = [0, 0, 6, 7, 8, 9][level]
-    cross_h = [5, 5, 6, 6, 7, 7][level]
-    wing_w  = [0, 0, 0, 10, 11, 12][level]
-    wing_h  = [0, 0, 0, 11, 12, 13][level]
+    body_w  = [20, 24, 28, 28, 30, 32, 34, 36, 38][level]
+    body_h  = [14, 16, 17, 19, 20, 21, 23, 25, 27][level]
+    roof_h  = [10, 11, 12, 13, 14, 15, 16, 17, 18][level]
+    tower_h = [0, 0, 10, 12, 13, 15, 17, 19, 21][level]
+    spire_h = [0, 0, 6, 7, 8, 9, 10, 11, 12][level]
+    cross_h = [5, 5, 6, 6, 7, 7, 8, 9, 9][level]
+    wing_w  = [0, 0, 0, 10, 11, 12, 13, 14, 15][level]
+    wing_h  = [0, 0, 0, 11, 12, 13, 14, 15, 16][level]
     margin_x, margin_top, margin_bot = 6, 3, 2
 
     total_wing = wing_w * (1 if level == 3 else (2 if level >= 4 else 0))
@@ -519,7 +519,7 @@ def app_icon(size):
 
 
 if __name__ == "__main__":
-    for lv in range(6):
+    for lv in range(9):
         save(sanctuary(lv), f"sanctuary_{lv}.png")
     for lv in range(5):
         save(education(lv), f"education_{lv}.png")
