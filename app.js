@@ -249,6 +249,9 @@ function officerDisplayName(roleKey, ordainedWeek, idx) {
 const GENERAL_MEMBERS_PAGE = 50;
 let generalMembersShown = GENERAL_MEMBERS_PAGE;
 
+const CAMPAIGN_HISTORY_PAGE = 10;
+let campaignHistoryShown = CAMPAIGN_HISTORY_PAGE;
+
 function generalMemberProfile(i) {
   const rnd = seededRng(hashStr('genmember:' + i));
   const gender = rnd() < 0.5 ? 'M' : 'F';
@@ -919,6 +922,7 @@ function newGame(name) {
     gameStartDate: new Date().toISOString().slice(0, 10), // 절대 시간 표기의 기준점(게임을 실제로 시작한 날짜)
     pastorSalaryMult: 1,
     candidateSeed: Math.floor(Math.random() * 1000000000), // 이 판에서 부교역자 후보들이 어떤 사람으로 나올지 결정하는 무작위 시드
+    campaignHistory: [],
   };
 }
 
@@ -946,6 +950,7 @@ function migrateSave(s) {
   if (!s.gameStartDate) s.gameStartDate = new Date().toISOString().slice(0, 10);
   if (typeof s.pastorSalaryMult !== 'number') s.pastorSalaryMult = 1;
   if (typeof s.candidateSeed !== 'number') s.candidateSeed = Math.floor(Math.random() * 1000000000); // 구버전 저장 호환 — 이 판만의 시드를 새로 부여
+  if (!Array.isArray(s.campaignHistory)) s.campaignHistory = [];
   for (const k of ['elder', 'deacon', 'exhorter']) {
     if (typeof s.officers[k] === 'number') {
       const n = s.officers[k];
@@ -1355,12 +1360,28 @@ function actionToggleDepartment(key) {
   render();
 }
 
+/* 역대 행사 보고서(오너 지시) — 행사를 치를 때마다 결과를 기록해두어, 다음에 같은 행사를
+   또 열지 다른 걸 시도할지 판단할 근거로 삼을 수 있게 한다. */
+const CAMPAIGN_HISTORY_MAX = 50;
+
 function actionCampaign(key) {
   const def = CAMPAIGNS[key];
   if (state.fund < def.cost) return;
+  const before = snapshotStats(state);
   state.fund -= def.cost;
   const msg = def.apply(state);
+  const after = snapshotStats(state);
   addLog(msg);
+  if (!state.campaignHistory) state.campaignHistory = [];
+  state.campaignHistory.unshift({
+    week: state.week, key, name: def.name, icon: def.icon, msg,
+    fundDelta: after.fund - before.fund,
+    memberDelta: after.members - before.members,
+    faithDelta: +(after.faith - before.faith).toFixed(1),
+    repDelta: +(after.reputation - before.reputation).toFixed(1),
+    volunteerDelta: after.volunteers - before.volunteers,
+  });
+  if (state.campaignHistory.length > CAMPAIGN_HISTORY_MAX) state.campaignHistory.length = CAMPAIGN_HISTORY_MAX;
   saveGame();
   render();
 }
@@ -1661,6 +1682,42 @@ function renderCampaigns() {
     wrap.appendChild(card);
   }
   wrap.querySelectorAll('[data-campaign]').forEach((b) => b.addEventListener('click', () => actionCampaign(b.dataset.campaign)));
+
+  if (state.campaignHistory && state.campaignHistory.length) {
+    wrap.appendChild(el('div', 'section-title', `역대 행사 보고서 (${state.campaignHistory.length}건) — 다음 행사를 정할 때 참고하세요`));
+    const hist = state.campaignHistory;
+    const shown = Math.min(campaignHistoryShown, hist.length);
+    for (let i = 0; i < shown; i++) {
+      const h = hist[i];
+      const deltas = [
+        ['재정', h.fundDelta, 'won'], ['성도수', h.memberDelta, 'count'],
+        ['신앙지수', h.faithDelta, 'num'], ['지역신뢰', h.repDelta, 'num'], ['봉사자', h.volunteerDelta, 'count'],
+      ];
+      const deltaHtml = deltas.filter(([, d]) => d).map(([label, d, kind]) => {
+        const cls = d > 0 ? 'delta-pos' : 'delta-neg';
+        const text = kind === 'won' ? (d > 0 ? '+' : '') + fmtWon(d) : `${d > 0 ? '+' : ''}${d}`;
+        return `<span class="${cls}" style="margin-right:8px">${label} ${text}</span>`;
+      }).join('') || '<span class="delta-zero">눈에 띄는 변화 없음</span>';
+      const card = el('div', 'card');
+      card.innerHTML = `
+        <div class="card-row">
+          <img class="card-emoji-img" src="assets/${h.icon}" alt="">
+          <div class="card-main">
+            <div class="card-title">${h.name} <span class="card-level">${h.week}주차</span></div>
+            <div class="card-sub">${escapeHtml(h.msg)}</div>
+            <div class="card-sub" style="margin-top:6px">${deltaHtml}</div>
+          </div>
+        </div>`;
+      wrap.appendChild(card);
+    }
+    if (shown < hist.length) {
+      const remain = hist.length - shown;
+      const moreBtn = el('button', 'btn btn-outline btn-small', `${fmt(Math.min(CAMPAIGN_HISTORY_PAGE, remain))}건 더 보기 (${fmt(remain)}건 남음)`);
+      moreBtn.style.width = '100%';
+      moreBtn.addEventListener('click', () => { campaignHistoryShown += CAMPAIGN_HISTORY_PAGE; render(); });
+      wrap.appendChild(moreBtn);
+    }
+  }
 
   wrap.appendChild(el('div', 'section-title', '가속권 — 시간의 흐름을 한시적으로 빠르게'));
   const boosting = currentSpeedMultiplier() > 1;
@@ -2174,7 +2231,7 @@ function initTabs() {
 let autoPlayOn = false;
 let autoPlayTimer = null;
 let lastTickAt = Date.now(); // 마지막으로 주가 실제로 넘어간 실시간 시각 — 날짜 표기를 실시간으로 보간하는 데 쓴다
-const AUTO_PLAY_INTERVAL_MS = 60 * 1000; // 1분 = 게임 속 1주(오너 지시)
+const AUTO_PLAY_INTERVAL_MS = 30 * 1000; // 30초 = 게임 속 1주(오너 지시)
 
 /* 대시보드 상단 날짜·나이 표기가 다음 주 틱까지 멈춰 있지 않고 실시간으로 흘러가도록
    보간한다(오너 지시: "yyyymmdd 표기 실시간 반영"). 실제 게임 상태(state.week)는 건드리지
@@ -2268,7 +2325,7 @@ function actionBuyBoost(key) {
 /* ===================== 오프라인(자리비움) 진행 ===================== */
 /* 앱을 닫아둔 실제 시간만큼 교회는 계속 운영된다 — 모바일 타이쿤 게임의 핵심 관례. */
 
-const OFFLINE_SECONDS_PER_WEEK = 60; // 실시간 자동진행(1분=1주)과 같은 속도로 맞춤 — 예전엔 5배 느려서 앱을 꺼두는 쪽이 오히려 손해였다
+const OFFLINE_SECONDS_PER_WEEK = 30; // 실시간 자동진행(30초=1주)과 같은 속도로 맞춤 — 앱을 꺼두는 쪽이 오히려 손해 보지 않도록
 /* 웹페이지는 탭이 닫히거나 백그라운드로 가면 실제로 JS가 돌지 않는다(브라우저 표준 제약 —
    진짜 백그라운드 실행은 서버 없이는 불가능) — 그래서 "떠나 있던 만큼 계속 운영됐다"는
    체감은 돌아왔을 때 경과 시간만큼 한 번에 계산해 몰아주는 방식으로 구현한다. 예전엔 최대
@@ -2276,7 +2333,7 @@ const OFFLINE_SECONDS_PER_WEEK = 60; // 실시간 자동진행(1분=1주)과 같
    "앱을 꺼두거나 벗어나 있어도 진행되는 느낌"을 살리기 위해 최대 24시간(하루) 분량까지
    인정하도록 늘렸다. 그 이상(며칠 이상 방치)은 여전히 캡을 둬서 한 번에 게임 후반부를
    건너뛰는 극단적 결과를 막는다. */
-const OFFLINE_MAX_WEEKS = 1440;
+const OFFLINE_MAX_WEEKS = 2880; // 30초/주 기준 24시간(하루) 분량 — 속도가 바뀌어도 최대 인정 시간(하루)은 그대로 유지
 
 function applyOfflineProgress() {
   const now = Date.now();

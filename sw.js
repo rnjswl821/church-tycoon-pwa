@@ -1,4 +1,4 @@
-const CACHE_NAME = 'church-tycoon-v12';
+const CACHE_NAME = 'church-tycoon-v13';
 const ASSETS = [
   './',
   './index.html',
