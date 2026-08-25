@@ -15,6 +15,7 @@
   --accent: #c98a3e;
   --good: #3f8f5f;
   --bad: #b8563f;
+  --warn: #c99a2e;
   --bad-tint: #fbe7e2;
   --border: #e3ddd0;
   --modal-bg: #ffffff;
@@ -37,6 +38,7 @@
     --accent: #d9a45f;
     --good: #5fb37f;
     --bad: #d97b5f;
+    --warn: #d9b04e;
     --bad-tint: #3a2420;
     --border: #38393f;
     --modal-bg: #26272e;
@@ -58,6 +60,7 @@
   --accent: #d9a45f;
   --good: #5fb37f;
   --bad: #d97b5f;
+  --warn: #d9b04e;
   --bad-tint: #3a2420;
   --border: #38393f;
   --modal-bg: #26272e;
@@ -325,6 +328,10 @@ body {
   gap: 4px;
 }
 .collapse-arrow { display: inline-block; width: 10px; color: var(--primary); }
+.status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; flex-shrink: 0; }
+.status-dot.good { background: var(--good); }
+.status-dot.warn { background: var(--warn); }
+.status-dot.bad { background: var(--bad); }
 
 /* Cards */
 .card {

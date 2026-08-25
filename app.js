@@ -501,6 +501,66 @@ const PASTORAL_DIRECTIONS = {
   },
 };
 
+/* 부교역자·직분자 개인의 신앙 상태(오너 지시: "신앙 상태 신호등과 개인사 발생 시 표기하여
+   목회적 조치를 취할 수 있도록"). wellbeing(0~100)이 낮을수록 신호등이 빨간불에 가까워진다.
+   성도 수천~수만 명 전원을 추적할 수는 없어(교적부 개별 열람과 별개로) 부교역자·직분자처럼
+   이미 개별 신상이 저장되는 사람들에게만 적용한다. */
+function wellbeingColor(wb) {
+  const v = typeof wb === 'number' ? wb : 70;
+  if (v >= 60) return 'good';
+  if (v >= 30) return 'warn';
+  return 'bad';
+}
+
+const PERSONAL_EVENTS = [
+  { title: '가정의 어려움', icon: 'micon_m_house.png', body: (n) => `${n}님의 가정에 어려운 일이 있다는 소식이 들려옵니다.` },
+  { title: '건강이 안 좋아지셨습니다', icon: 'micon_ev_hospital.png', body: (n) => `${n}님이 최근 건강이 좋지 않아 사역에 지장을 겪고 있습니다.` },
+  { title: '지친 기색이 역력합니다', icon: 'micon_ev_tired.png', body: (n) => `${n}님이 쉼 없이 달려오느라 많이 지친 듯합니다.` },
+  { title: '신앙의 방황', icon: 'micon_ev_rain.png', body: (n) => `${n}님이 요즘 신앙의 회의와 씨름하고 있다는 이야기가 들려옵니다.` },
+  { title: '재정적 어려움', icon: 'micon_ev_chartdown.png', body: (n) => `${n}님의 가정 형편이 요즘 넉넉지 않다는 소식이 들려옵니다.` },
+  { title: '관계의 갈등', icon: 'micon_ev_chat.png', body: (n) => `${n}님이 다른 성도와 작은 갈등을 겪고 있다는 이야기가 들려옵니다.` },
+];
+const PERSONAL_EVENT_CHOICES = [
+  { label: '시간을 내어 깊이 돌본다', wellbeingDelta: 15, cost: 100000 },
+  { label: '짧게라도 마음을 전한다', wellbeingDelta: 7, cost: 30000 },
+  { label: '지금은 여력이 없어 넘어간다', wellbeingDelta: -10, cost: 0 },
+];
+
+function eligiblePersonRefs() {
+  const refs = [];
+  for (const key in STAFF) {
+    if (state.staffHired[key]) refs.push({ kind: 'staff', key, person: state.staffHired[key] });
+  }
+  for (const key in OFFICERS) {
+    (state.officers[key] || []).forEach((entry) => {
+      if (entry && typeof entry === 'object') refs.push({ kind: 'officer', key, person: entry });
+    });
+  }
+  return refs;
+}
+
+function showPersonalEvent(ref, template) {
+  document.getElementById('eventIcon').src = 'assets/' + template.icon;
+  document.getElementById('eventTitle').textContent = template.title;
+  document.getElementById('eventBody').textContent = template.body(ref.person.name);
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  PERSONAL_EVENT_CHOICES.forEach((c) => {
+    const btn = el('button', 'choice-btn');
+    btn.innerHTML = `<span class="choice-label">${c.label}</span>`;
+    btn.addEventListener('click', () => {
+      if (c.cost) state.fund = Math.max(0, state.fund - c.cost);
+      ref.person.wellbeing = clamp((ref.person.wellbeing || 70) + c.wellbeingDelta, 0, 100);
+      addLog(`${ref.person.name}님의 개인사에 "${c.label}"(으)로 응답했습니다(신앙 상태 ${c.wellbeingDelta >= 0 ? '+' : ''}${c.wellbeingDelta}).`);
+      saveGame();
+      render();
+      hideModal('eventModal');
+    });
+    box.appendChild(btn);
+  });
+  showModal('eventModal');
+}
+
 const CAMPAIGNS = {
   revival: {
     name: '부흥회', icon: 'micon_c_flame.png',
@@ -1077,6 +1137,12 @@ function migrateSave(s) {
   for (const k in (s.staffHired || {})) {
     if (s.staffHired[k] === true) s.staffHired[k] = null; // 구버전(불리언) 저장 호환 — 이름 있는 후보자로 다시 청빙 필요
     if (s.staffHired[k] === false) s.staffHired[k] = null;
+    if (s.staffHired[k] && typeof s.staffHired[k].wellbeing !== 'number') s.staffHired[k].wellbeing = 70; // 구버전 저장 호환
+  }
+  for (const k of ['elder', 'deacon', 'exhorter']) {
+    (s.officers[k] || []).forEach((entry) => {
+      if (entry && typeof entry === 'object' && typeof entry.wellbeing !== 'number') entry.wellbeing = 70; // 구버전 저장 호환
+    });
   }
   return s;
 }
@@ -1423,7 +1489,7 @@ function showAssignmentPicker(staffKey, candidate) {
 
 function actionHireCandidateConfirmed(key, candidate, assignedTo) {
   const def = STAFF[key];
-  state.staffHired[key] = Object.assign({ housing: false, hireWeek: state.week, assignedTo }, candidate);
+  state.staffHired[key] = Object.assign({ housing: false, hireWeek: state.week, assignedTo, wellbeing: 70 }, candidate);
   const label = assignmentLabel(assignedTo);
   addLog(`${def.name} ${candidate.name}을(를) 청빙했습니다.${label ? ` (${label} 담당)` : ''}`);
   saveGame();
@@ -1574,7 +1640,7 @@ function actionOrdainOfficerConfirmed(key, candidate) {
     state.fund -= def.cost;
     state.volunteerFrac = Math.max(0, state.volunteerFrac - def.volCost);
     state.volunteers = Math.floor(state.volunteerFrac);
-    state.officers[key].push({ week: state.week, name: candidate.name, age: candidate.age, family: candidate.family, tenureYears: candidate.tenureYears });
+    state.officers[key].push({ week: state.week, name: candidate.name, age: candidate.age, family: candidate.family, tenureYears: candidate.tenureYears, wellbeing: 70 });
     addLog(`공동의회 투표(찬성 ${pct}%)로 ${candidate.name}님이 ${def.name}(으)로 가결·임직되었습니다(노회 고시를 거쳤습니다 — 항존직이라 정년까지 계속 시무합니다).`);
   } else {
     const failCost = Math.round(def.cost * 0.3);
@@ -1624,11 +1690,20 @@ function actionNextWeek() {
   } else if (summary.milestone) {
     showMilestone(summary.milestone, summary.grantedBoost);
   } else if (state.week - (state.lastEventWeek || 0) >= EVENT_MIN_GAP_WEEKS && Math.random() < EVENT_TRIGGER_PROB) {
-    const ev = pickEvent();
-    if (ev) {
+    const refs = eligiblePersonRefs();
+    if (refs.length && Math.random() < 0.3) {
+      const ref = refs[Math.floor(Math.random() * refs.length)];
+      const template = PERSONAL_EVENTS[Math.floor(Math.random() * PERSONAL_EVENTS.length)];
       state.lastEventWeek = state.week;
       saveGame();
-      showEvent(ev);
+      showPersonalEvent(ref, template);
+    } else {
+      const ev = pickEvent();
+      if (ev) {
+        state.lastEventWeek = state.week;
+        saveGame();
+        showEvent(ev);
+      }
     }
   }
 }
@@ -2141,7 +2216,7 @@ function renderRoster() {
       <div class="card-row">
         <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
-          <div class="card-title">${hired.name} <span class="card-level">${def.name}</span></div>
+          <div class="card-title"><span class="status-dot ${wellbeingColor(hired.wellbeing)}"></span>${hired.name} <span class="card-level">${def.name}</span></div>
           <div class="card-sub">${genderLabel(hired.gender)}·${hired.age}세 · ${hired.family} · MBTI ${hired.mbti}</div>
           <div class="card-sub">주력: ${hired.styles.join('·')}${hired.housing ? ' · 사택 거주' : ''}</div>
           <div class="card-sub">${assignmentLabel(hired.assignedTo) ? `담당: ${assignmentLabel(hired.assignedTo)}` : '담당 사역 없음'}</div>
@@ -2171,7 +2246,7 @@ function renderRoster() {
         <div class="card-row">
           <img class="card-emoji-img" src="assets/${OFFICERS[key].icon}" alt="">
           <div class="card-main">
-            <div class="card-title">${p.name} <span class="card-level">${officerNames[key]}·${p.age}세</span></div>
+            <div class="card-title"><span class="status-dot ${wellbeingColor(p.wellbeing)}"></span>${p.name} <span class="card-level">${officerNames[key]}·${p.age}세</span></div>
             <div class="card-sub">${p.family}${p.tenureYears ? ` · 등록 ${p.tenureYears}년차` : ''}</div>
           </div>
         </div>`;
@@ -2246,7 +2321,7 @@ function renderStaff() {
         <div class="card-row">
           <img class="card-emoji-img" src="assets/${def.icon}" alt="">
           <div class="card-main">
-            <div class="card-title">${def.name} · ${hired.name} <span class="card-level">${genderLabel(hired.gender)}·${hired.age}세</span></div>
+            <div class="card-title"><span class="status-dot ${wellbeingColor(hired.wellbeing)}"></span>${def.name} · ${hired.name} <span class="card-level">${genderLabel(hired.gender)}·${hired.age}세</span></div>
             <div class="card-sub">${hired.family} · MBTI ${hired.mbti} · 주력: ${hired.styles.join('·')}</div>
             <div class="card-sub">"${hired.intro}"</div>
             <div class="card-sub">${assignmentLabel(hired.assignedTo) ? `담당: ${assignmentLabel(hired.assignedTo)} (효과 +${Math.round((STAFF_ASSIGNMENT_MULT - 1) * 100)}%)` : '담당 사역 없음'}</div>
