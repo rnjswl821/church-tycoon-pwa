@@ -6,6 +6,14 @@
 <title>목회타이쿤</title>
 <meta name="description" content="교회를 세우고 성도를 섬기며 함께 성장시키는 목회 경영 시뮬레이션 게임">
 <meta name="theme-color" content="#3a5a96">
+<script>
+  /* 저장된 테마 선호를 CSS 적용 전에 최대한 일찍 반영 — 로드 시 잘못된 테마가 잠깐
+     번쩍이는 걸 막는다(오너 지시: 라이트/다크 앱 내 선택 기능). */
+  try {
+    var __t = localStorage.getItem('church-tycoon-theme');
+    if (__t === 'light' || __t === 'dark') document.documentElement.dataset.theme = __t;
+  } catch (e) { /* ignore */ }
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -81,6 +89,7 @@
 
   <footer class="action-bar">
     <button id="resetBtn" class="btn btn-ghost btn-icon" title="새로 시작" aria-label="새로 시작"><img class="inline-icon" src="assets/micon_ui_refresh.png" alt=""></button>
+    <button id="themeToggleBtn" class="btn btn-ghost btn-icon" title="테마: 시스템" aria-label="테마 전환"><img class="inline-icon" id="themeToggleIcon" src="assets/micon_ui_sun.png" alt=""></button>
     <span id="saveIndicator" class="save-indicator" title="자동 저장됨">●</span>
     <div class="action-right">
       <button id="autoToggleBtn" class="btn btn-primary" aria-pressed="true">⏸ 시간이 흐르는 중</button>

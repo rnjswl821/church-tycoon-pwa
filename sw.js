@@ -1,4 +1,4 @@
-const CACHE_NAME = 'church-tycoon-v11';
+const CACHE_NAME = 'church-tycoon-v12';
 const ASSETS = [
   './',
   './index.html',
@@ -41,7 +41,7 @@ const ASSETS = [
   './assets/micon_ui_folder.png', './assets/micon_ui_gift.png', './assets/micon_ui_hourglass.png',
   './assets/micon_ui_lock.png', './assets/micon_ui_party.png', './assets/micon_ui_people.png',
   './assets/micon_ui_refresh.png', './assets/micon_ui_sleep.png', './assets/micon_ui_sparkle.png',
-  './assets/micon_ui_warning.png',
+  './assets/micon_ui_warning.png', './assets/micon_ui_sun.png', './assets/micon_ui_moon.png',
 ];
 
 self.addEventListener('install', (event) => {

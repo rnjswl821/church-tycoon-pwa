@@ -221,7 +221,11 @@ function generateCandidate(seed, genderConstraint) {
 function candidatesFor(roleKey) {
   const def = STAFF[roleKey];
   const gen = (state.candidateGen && state.candidateGen[roleKey]) || 0;
-  const baseSeed = hashStr(roleKey) + gen * 7919;
+  /* candidateSeed는 새 게임을 시작할 때마다 무작위로 하나 뽑혀 저장된다(오너 지시: "부교역자
+     후보들도 랜덤하게 나오도록") — 예전엔 역할 이름(hashStr(roleKey))만으로 시드를 잡아서
+     어느 게임을 새로 시작해도 항상 똑같은 세 사람이 나왔다. 지금은 같은 판 안에서는(같은
+     candidateGen일 때) 후보가 안정적으로 유지되면서도, 판마다·역할마다 다른 사람이 뜬다. */
+  const baseSeed = hashStr(roleKey) + gen * 7919 + (state.candidateSeed || 0);
   return [0, 1, 2].map((i) => generateCandidate(baseSeed + i * 104729, def.genderConstraint));
 }
 
@@ -278,32 +282,32 @@ const MINISTRIES = {
     desc: '영아·유아를 둔 가정을 품는 사역입니다. 젊은 가정의 정착과 입소문에 도움이 됩니다.',
     upkeep: 80000,
     effect: { retentionBonus: 0.02, visitorPerWeek: 0.15 },
-    unlock: (s) => s.buildings.education >= 1,
-    lockDesc: '교육관 1레벨 이상 필요',
+    unlock: (s) => s.buildings.education >= 1 && !!s.departmentsActive.education_dept,
+    lockDesc: '교육관 1레벨 + 교육부 조직 필요',
   },
   elementary_ministry: {
     name: '유초등부', icon: 'micon_m_elementary.png',
     desc: '유치부터 초등 자녀를 둔 가정을 품는 사역입니다. 가정 단위 새가족 유입에 도움이 됩니다.',
     upkeep: 90000,
     effect: { retentionBonus: 0.02, visitorPerWeek: 0.25 },
-    unlock: (s) => s.buildings.education >= 1,
-    lockDesc: '교육관 1레벨 이상 필요',
+    unlock: (s) => s.buildings.education >= 1 && !!s.departmentsActive.education_dept,
+    lockDesc: '교육관 1레벨 + 교육부 조직 필요',
   },
   sfc_ministry: {
     name: 'SFC(중고등부)', icon: 'micon_m_sfc.png',
     desc: '중·고등학생 신앙 공동체입니다. 학업으로 흔들리기 쉬운 시기에 신앙의 뿌리를 다집니다.',
     upkeep: 110000,
     effect: { faithPerWeek: 0.3, retentionBonus: 0.02 },
-    unlock: (s) => s.members >= EVENT_TIER_SPROUT,
-    lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 필요`,
+    unlock: (s) => s.members >= EVENT_TIER_SPROUT && !!s.departmentsActive.education_dept,
+    lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 + 교육부 조직 필요`,
   },
   youth_ministry: {
     name: '청년부', icon: 'micon_m_youth.png',
     desc: '청년 세대의 신앙과 공동체를 세웁니다.',
     upkeep: 150000,
     effect: { faithPerWeek: 0.6, reputationPerWeek: 0.4 },
-    unlock: (s) => s.members >= 40,
-    lockDesc: '성도수 40명 이상 필요',
+    unlock: (s) => s.members >= 40 && !!s.departmentsActive.education_dept,
+    lockDesc: '성도수 40명 이상 + 교육부 조직 필요',
   },
   diakonia: {
     name: '봉사단', icon: 'micon_m_basket.png',
@@ -914,6 +918,7 @@ function newGame(name) {
     speedBoostKey: null, speedBoostMultiplier: 1, speedBoostUntil: 0,
     gameStartDate: new Date().toISOString().slice(0, 10), // 절대 시간 표기의 기준점(게임을 실제로 시작한 날짜)
     pastorSalaryMult: 1,
+    candidateSeed: Math.floor(Math.random() * 1000000000), // 이 판에서 부교역자 후보들이 어떤 사람으로 나올지 결정하는 무작위 시드
   };
 }
 
@@ -940,6 +945,7 @@ function migrateSave(s) {
   if (typeof s.speedBoostKey === 'undefined') s.speedBoostKey = null;
   if (!s.gameStartDate) s.gameStartDate = new Date().toISOString().slice(0, 10);
   if (typeof s.pastorSalaryMult !== 'number') s.pastorSalaryMult = 1;
+  if (typeof s.candidateSeed !== 'number') s.candidateSeed = Math.floor(Math.random() * 1000000000); // 구버전 저장 호환 — 이 판만의 시드를 새로 부여
   for (const k of ['elder', 'deacon', 'exhorter']) {
     if (typeof s.officers[k] === 'number') {
       const n = s.officers[k];
@@ -2352,6 +2358,44 @@ function tryTapBonus() {
   return true;
 }
 
+/* 라이트/다크 테마 — 기기 설정을 기본 따르되(오너 지시) 앱 안에서 직접 고를 수도 있다.
+   footer 아이콘 버튼을 탭할 때마다 시스템→라이트→다크→시스템 순으로 순환한다. */
+const THEME_STORAGE_KEY = 'church-tycoon-theme';
+const THEME_CYCLE = ['system', 'light', 'dark'];
+
+function systemPrefersDark() {
+  try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; }
+}
+
+function applyTheme(mode) {
+  if (mode === 'light' || mode === 'dark') document.documentElement.dataset.theme = mode;
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem(THEME_STORAGE_KEY, mode); } catch (e) { /* ignore */ }
+  const btn = document.getElementById('themeToggleBtn');
+  const icon = document.getElementById('themeToggleIcon');
+  if (!btn || !icon) return;
+  const isDark = mode === 'dark' || (mode === 'system' && systemPrefersDark());
+  icon.src = 'assets/' + (isDark ? 'micon_ui_moon.png' : 'micon_ui_sun.png');
+  const label = mode === 'system' ? '시스템' : mode === 'light' ? '라이트' : '다크';
+  btn.title = `테마: ${label} (탭하여 전환)`;
+}
+
+function initTheme() {
+  let saved = 'system';
+  try { saved = localStorage.getItem(THEME_STORAGE_KEY) || 'system'; } catch (e) { /* ignore */ }
+  if (THEME_CYCLE.indexOf(saved) === -1) saved = 'system';
+  applyTheme(saved);
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      let cur = 'system';
+      try { cur = localStorage.getItem(THEME_STORAGE_KEY) || 'system'; } catch (e) { /* ignore */ }
+      const next = THEME_CYCLE[(THEME_CYCLE.indexOf(cur) + 1) % THEME_CYCLE.length];
+      applyTheme(next);
+    });
+  }
+}
+
 function initFooter() {
   document.getElementById('resetBtn').addEventListener('click', () => {
     showConfirmReset();
@@ -2484,6 +2528,7 @@ function initIntro() {
 }
 
 function init() {
+  initTheme();
   initTabs();
   initFooter();
   initChurchNameInput();

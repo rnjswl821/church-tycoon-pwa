@@ -1,16 +1,70 @@
+/* 테마(오너 지시: "기기 설정에 따라 라이트/다크, 앱 내에서도 선택할 수 있도록") — 라이트를
+   기본 팔레트로 두고, prefers-color-scheme으로 시스템 다크를 자동 반영하되(명시적으로
+   "라이트"를 고른 경우는 제외), data-theme="dark"를 찍으면 시스템 설정과 무관하게 항상
+   다크가 이긴다. 모든 색은 여기 토큰을 통해서만 쓴다 — 미디어쿼리·[data-theme] 블록 밖에서
+   하드코딩된 색을 두면 한쪽 테마에서 안 읽히는 전형적인 버그가 생긴다. */
 :root {
   --bg: #f4f1ea;
+  --bg-page: #d8d4c8;
   --bg-card: #ffffff;
   --ink: #2b2a28;
   --ink-soft: #6b6862;
   --primary: #3a5a96;
   --primary-dark: #2a4270;
+  --primary-tint: #e4ecfb;
   --accent: #c98a3e;
   --good: #3f8f5f;
   --bad: #b8563f;
+  --bad-tint: #fbe7e2;
   --border: #e3ddd0;
+  --modal-bg: #ffffff;
+  --modal-overlay: rgba(20, 18, 15, 0.55);
+  --toggle-off-bg: #eeeeee;
+  --scene-hint-bg: rgba(43, 42, 40, 0.45);
   --radius: 14px;
   --shadow: 0 2px 10px rgba(43, 42, 40, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c1d22;
+    --bg-page: #121316;
+    --bg-card: #26272e;
+    --ink: #ece9e2;
+    --ink-soft: #a8a5a0;
+    --primary: #7699dd;
+    --primary-dark: #a9c2f0;
+    --primary-tint: #253352;
+    --accent: #d9a45f;
+    --good: #5fb37f;
+    --bad: #d97b5f;
+    --bad-tint: #3a2420;
+    --border: #38393f;
+    --modal-bg: #26272e;
+    --modal-overlay: rgba(0, 0, 0, 0.65);
+    --toggle-off-bg: #3a3b42;
+    --scene-hint-bg: rgba(0, 0, 0, 0.55);
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c1d22;
+  --bg-page: #121316;
+  --bg-card: #26272e;
+  --ink: #ece9e2;
+  --ink-soft: #a8a5a0;
+  --primary: #7699dd;
+  --primary-dark: #a9c2f0;
+  --primary-tint: #253352;
+  --accent: #d9a45f;
+  --good: #5fb37f;
+  --bad: #d97b5f;
+  --bad-tint: #3a2420;
+  --border: #38393f;
+  --modal-bg: #26272e;
+  --modal-overlay: rgba(0, 0, 0, 0.65);
+  --toggle-off-bg: #3a3b42;
+  --scene-hint-bg: rgba(0, 0, 0, 0.55);
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 * { box-sizing: border-box; min-width: 0; }
@@ -22,7 +76,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background: #d8d4c8;
+  background: var(--bg-page);
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -121,7 +175,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   color: var(--primary-dark);
-  background: #e4ecfb;
+  background: var(--primary-tint);
   border-radius: 999px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -149,9 +203,9 @@ body {
   border-radius: 14px;
   overflow: hidden;
   box-shadow: var(--shadow);
-  border: 3px solid #fff;
+  border: 3px solid var(--bg-card);
   position: relative;
-  background: #8bc46b;
+  background: #8bc46b; /* 캠퍼스 잔디색 — 실외 낮 풍경을 표현하는 색이라 테마와 무관하게 고정 */
 }
 #scene {
   display: block;
@@ -168,7 +222,7 @@ body {
   bottom: 6px;
   font-size: 10px;
   color: #fff;
-  background: rgba(43, 42, 40, 0.45);
+  background: var(--scene-hint-bg);
   padding: 3px 8px;
   border-radius: 999px;
   pointer-events: none;
@@ -287,7 +341,7 @@ body {
 .card-level {
   font-size: 11px;
   color: var(--primary-dark);
-  background: #e4ecfb;
+  background: var(--primary-tint);
   border-radius: 999px;
   padding: 1px 8px;
   font-weight: 700;
@@ -295,7 +349,7 @@ body {
 .card-lock {
   font-size: 11px;
   color: var(--bad);
-  background: #fbe7e2;
+  background: var(--bad-tint);
   border-radius: 999px;
   padding: 1px 8px;
   font-weight: 700;
@@ -366,10 +420,10 @@ body {
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:disabled { background: #b7c3d9; cursor: not-allowed; }
 .btn-ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--border); }
-.btn-outline { background: #fff; color: var(--primary-dark); border: 1px solid var(--primary); }
+.btn-outline { background: var(--modal-bg); color: var(--primary-dark); border: 1px solid var(--primary); }
 .btn-outline:disabled { color: var(--ink-soft); border-color: var(--border); cursor: not-allowed; }
 .btn-toggle-on { background: var(--good); color: #fff; }
-.btn-toggle-off { background: #eee; color: var(--ink-soft); }
+.btn-toggle-off { background: var(--toggle-off-bg); color: var(--ink-soft); }
 .btn-small { padding: 6px 12px; font-size: 12px; }
 
 /* Footer action bar */
@@ -443,7 +497,7 @@ body {
 }
 .modal-overlay.hidden { display: none; }
 .modal {
-  background: #fff;
+  background: var(--modal-bg);
   border-radius: 18px;
   max-width: 420px;
   width: 100%;

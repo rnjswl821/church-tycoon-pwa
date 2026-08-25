@@ -1033,6 +1033,22 @@ def micon_ui_lock():
     d.ellipse([8, 12, 12, 16], fill=INK)
     return im
 
+def micon_ui_sun():
+    """테마 전환 버튼 — 라이트 모드 표시"""
+    W, H, im, d = mi()
+    d.ellipse([5, 5, 15, 15], fill=SUN_YEL, outline=INK)
+    for (x1, y1, x2, y2) in [(10, 0, 10, 3), (10, 17, 10, 20), (0, 10, 3, 10), (17, 10, 20, 10),
+                              (2.5, 2.5, 4.5, 4.5), (15.5, 15.5, 17.5, 17.5), (2.5, 17.5, 4.5, 15.5), (17.5, 2.5, 15.5, 4.5)]:
+        d.line([(x1, y1), (x2, y2)], fill=SUN_YEL, width=2)
+    return im
+
+def micon_ui_moon():
+    """테마 전환 버튼 — 다크 모드 표시(초승달: 원을 그린 뒤 겹치는 원을 투명으로 지워 만든다)"""
+    W, H, im, d = mi()
+    d.ellipse([3, 2, 17, 18], fill=(230, 220, 160, 255), outline=INK)
+    d.ellipse([7, 1, 21, 17], fill=(0, 0, 0, 0))
+    return im
+
 MISC_ICONS = {
     'b_sanctuary': micon_b_sanctuary, 'b_education': micon_b_education,
     'b_fellowship': micon_b_fellowship, 'b_parking': micon_b_parking,
@@ -1058,7 +1074,7 @@ MISC_ICONS = {
     'ui_check': micon_ui_check, 'ui_warning': micon_ui_warning, 'ui_sparkle': micon_ui_sparkle,
     'ui_party': micon_ui_party, 'ui_hourglass': micon_ui_hourglass, 'ui_floppy': micon_ui_floppy,
     'ui_people': micon_ui_people, 'ui_gift': micon_ui_gift, 'ui_sleep': micon_ui_sleep,
-    'ui_lock': micon_ui_lock,
+    'ui_lock': micon_ui_lock, 'ui_sun': micon_ui_sun, 'ui_moon': micon_ui_moon,
 }
 
 # ---------------------------------------------------------------- app icon (PWA)
