@@ -238,21 +238,39 @@ function hashStr(s) {
 /* 직분자 개별 이름 — 임직 주차 배열(숫자)만 저장하던 구조를 바꾸지 않고, 표시할 때만
    (역할+임직주차+순번)을 시드로 결정론적 이름을 만든다(교적부 열람 기능, 오너 지시).
    같은 값이면 항상 같은 이름이 나오므로 저장 데이터 마이그레이션 없이 안정적으로 표시된다. */
-function officerDisplayName(roleKey, ordainedWeek, idx) {
-  return officerDisplayProfile(roleKey, ordainedWeek, idx).name;
-}
-
 /* 연령대는 고신헌법 자격 조건을 그대로 따른다: 장로 40~66세(2부 제65조), 집사 35~66세
-   (제75조), 권사 45~66세(제81조). */
+   (제75조), 권사 45~66세(제81조). 후보자 생성 시 등록연한(tenureYears)도 함께 부여하는데,
+   교회 자체가 존재해온 기간(churchAgeYears)을 넘을 수 없다(오너 지시: "임직자의 조건 등등
+   맞게") — OFFICERS.unlock에서 이미 교회 나이가 등록연한 미만이면 후보 생성 자체를 막으므로
+   여기 s는 있을 때만 상한 계산에 쓰고, 없으면 헌법상 최소연한만 반환한다(구버전 저장 표시용). */
 const OFFICER_AGE_RANGE = { elder: [40, 66], deacon: [35, 66], exhorter: [45, 66] };
 
-function officerDisplayProfile(roleKey, ordainedWeek, idx) {
-  const rnd = seededRng(hashStr(`${roleKey}:${ordainedWeek}:${idx}`));
+function officerDisplayProfile(roleKey, seed, idx, s) {
+  const rnd = seededRng(hashStr(`${roleKey}:${seed}:${idx}`));
   const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
   const [minAge, maxAge] = OFFICER_AGE_RANGE[roleKey] || [40, 66];
   const age = minAge + Math.floor(rnd() * (maxAge - minAge + 1));
   const family = CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
-  return { name, age, family };
+  const minTenure = OFFICER_MIN_TENURE[roleKey] || 2;
+  const cap = s ? Math.min(age - 18, churchAgeYears(s)) : minTenure;
+  const maxTenure = Math.max(minTenure, cap);
+  const tenureYears = minTenure + Math.floor(rnd() * (maxTenure - minTenure + 1));
+  return { name, age, family, tenureYears };
+}
+
+/* 공동의회에 세울 후보 셋 — 같은 주 안에서는 안정적으로 유지되고, 주가 바뀌면 새로 갱신된다. */
+function officerCandidatesFor(roleKey) {
+  const seed = `${state.week}:${state.candidateSeed || 0}`;
+  return [0, 1, 2].map((idx) => officerDisplayProfile(roleKey, seed, idx, state));
+}
+
+/* 실제 투표를 흉내낸 찬성률 — 신앙지수·지역신뢰가 좋은(공동체가 건강한) 교회일수록 높다.
+   고신헌법 제67조(장로), 준용 조항(집사·권사)의 "공동의회 2/3 이상 찬성" 문턱을 그대로 쓴다. */
+const OFFICER_VOTE_THRESHOLD = 2 / 3;
+
+function officerVoteApprovalRate(s) {
+  const base = 0.55 + (s.faith / 100) * 0.25 + (s.reputation / 100) * 0.1;
+  return clamp(base, 0.3, 0.95);
 }
 
 /* 일반 성도 개별 열람(오너 지시) — 수천~수만 명이 될 수 있어 한 번에 전부 DOM에 그리면
@@ -888,29 +906,34 @@ function officerMaxFor(s) {
   return Math.max(2, Math.floor(s.members / 25));
 }
 
+/* 등록연한(장로 3년·집사·권사 2년)은 2부 제65·75·81조 근거. 교회 자체가 그 연한보다
+   어리면 아무리 성도·봉사자가 많아도 후보 자격을 갖춘 사람이 있을 수 없다 — 그래서 unlock
+   조건에 churchAgeYears(s)도 함께 검사한다(오너 지시: "임직자의 조건 등등 맞게"). */
+const OFFICER_MIN_TENURE = { elder: 3, deacon: 2, exhorter: 2 };
+
 const OFFICERS = {
   elder: {
     name: '장로', icon: 'micon_o_elder.png',
-    desc: '만 40~66세 세례교인 중 신망 있는 이를 공동의회에서 장로로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
+    desc: '만 40~66세, 등록 3년 이상 된 세례교인 중 신망 있는 이를 공동의회 2/3 이상 찬성으로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 500000, volCost: 2,
-    unlock: (s) => s.members >= 30,
-    lockDesc: '세례교인(성도) 30명 이상 필요 — 당회 조직요건(제109조)',
+    unlock: (s) => s.members >= 30 && churchAgeYears(s) >= OFFICER_MIN_TENURE.elder,
+    lockDesc: `세례교인(성도) 30명 이상 + 개척 ${OFFICER_MIN_TENURE.elder}년 이상 필요 — 당회 조직요건(제109조)·등록연한(제65조)`,
     perUnitNote: '정착률 +2%p',
   },
   deacon: {
     name: '집사', icon: 'micon_o_deacon.png',
-    desc: '봉사와 회계, 구제를 섬기는 직분입니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
+    desc: '만 35~66세, 등록 2년 이상 된 성도 중 봉사와 회계, 구제를 섬길 이를 공동의회 2/3 이상 찬성으로 세웁니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 400000, volCost: 1,
-    unlock: (s) => s.volunteers >= 5,
-    lockDesc: '봉사자 5명 이상 필요',
+    unlock: (s) => s.volunteers >= 5 && churchAgeYears(s) >= OFFICER_MIN_TENURE.deacon,
+    lockDesc: `봉사자 5명 이상 + 개척 ${OFFICER_MIN_TENURE.deacon}년 이상 필요 — 등록연한(제75조)`,
     perUnitNote: '지역신뢰 +0.3/주',
   },
   exhorter: {
     name: '권사', icon: 'micon_o_exhorter.png',
-    desc: '심방을 통해 병자와 약한 이를 위로하고 격려하는 직분입니다(2부 제81~84조). 항존직에 준하는 직분이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
+    desc: '만 45~66세, 등록 2년 이상 된 여성도 중 심방을 통해 병자와 약한 이를 위로하고 격려할 이를 공동의회 2/3 이상 찬성으로 세웁니다(2부 제81~84조). 항존직에 준하는 직분이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
     cost: 400000, volCost: 1,
-    unlock: (s) => s.volunteers >= 5,
-    lockDesc: '봉사자 5명 이상 필요',
+    unlock: (s) => s.volunteers >= 5 && churchAgeYears(s) >= OFFICER_MIN_TENURE.exhorter,
+    lockDesc: `봉사자 5명 이상 + 개척 ${OFFICER_MIN_TENURE.exhorter}년 이상 필요 — 등록연한(제81조)`,
     perUnitNote: '신앙지수 +0.3/주',
   },
 };
@@ -943,6 +966,12 @@ function fmtWon(n) {
 }
 
 const WEEKS_PER_MONTH = 4.345;
+
+/* 교회 자체가 실제로 존재해온 햇수(정수, 내림) — 직분자 임직 등록연한 조건(장로 3년·집사·
+   권사 2년, 2부 제65·75·81조)이 개척 초기엔 물리적으로 성립할 수 없다는 걸 검사하는 데 쓴다. */
+function churchAgeYears(s) {
+  return Math.floor(Math.max(0, s.week - 1) / WEEKS_PER_MONTH / 12);
+}
 
 function formatChurchAge(week) {
   const elapsedWeeks = Math.max(0, week - 1);
@@ -1485,29 +1514,47 @@ function actionCampaign(key) {
   render();
 }
 
-/* 임직은 봉사자 풀에서 인원을 차출한다 — 항존직이라 한번 임직하면 되돌아오지 않으므로
-   (9차에서 자동만료 로직을 제거함), "왜 봉사자가 줄었지?" 하고 놀라지 않도록 임직 전에
-   반드시 확인창을 거치게 했다(오너 지시: "플레이상 해결방법을 만들어달라"). */
+/* 직분자 임직 절차 — 고신헌법 제67조(장로 선택, 공동의회 2/3 이상 찬성) 및 준용 조항
+   (집사·권사)을 그대로 게임에 반영한다(오너 지시): 후보자 중 한 명을 추천 → 공동의회
+   투표(2/3 이상 찬성해야 가결) → 가결된 경우에만 실제 임직. 부결되면 준비 비용 일부만
+   들고, 아무도 임직되지 않았으니 봉사자는 소모되지 않는다. */
 function actionOrdainOfficer(key) {
   const def = OFFICERS[key];
   const count = (state.officers[key] || []).length;
   if (count >= officerMaxFor(state)) return;
   if (!def.unlock(state)) return;
   if (state.fund < def.cost || state.volunteerFrac < def.volCost) return;
-  showConfirmOrdain(key);
+  showOfficerCandidatePicker(key);
 }
 
-function showConfirmOrdain(key) {
+function showOfficerCandidatePicker(key) {
+  const def = OFFICERS[key];
+  const candidates = officerCandidatesFor(key);
+  document.getElementById('eventIcon').src = 'assets/' + def.icon;
+  document.getElementById('eventTitle').textContent = `${def.name} 후보를 추천해주세요`;
+  document.getElementById('eventBody').textContent = '공동의회 투표에 부칠 후보 한 분을 고르세요. 2/3 이상 찬성해야 임직됩니다.';
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  candidates.forEach((c) => {
+    const btn = el('button', 'choice-btn');
+    btn.innerHTML = `<span class="choice-label">${c.name} · ${c.age}세 · ${c.family} · 등록 ${c.tenureYears}년차</span>`;
+    btn.addEventListener('click', () => showConfirmOrdain(key, c));
+    box.appendChild(btn);
+  });
+  showModal('eventModal');
+}
+
+function showConfirmOrdain(key, candidate) {
   const def = OFFICERS[key];
   document.getElementById('eventIcon').src = 'assets/' + def.icon;
-  document.getElementById('eventTitle').textContent = `${def.name}를 임직할까요?`;
+  document.getElementById('eventTitle').textContent = `${candidate.name}님을 ${def.name} 후보로 세울까요?`;
   document.getElementById('eventBody').textContent =
-    `${fmtWon(def.cost)}과 봉사자 ${def.volCost}명이 이 분께 위촉되어 쓰입니다.\n\n항존직이라 한번 임직하면 정년까지 계속 시무하며, 위촉된 봉사자는 봉사자 수로 돌아오지 않습니다.`;
+    `${fmtWon(def.cost)}과 봉사자 ${def.volCost}명이 준비됩니다. 공동의회 투표에서 2/3 이상 찬성해야 실제 임직됩니다 — 부결되면 준비 비용 일부만 들고 봉사자는 소모되지 않습니다.`;
   const box = document.getElementById('eventChoices');
   box.innerHTML = '';
   const yes = el('button', 'choice-btn');
-  yes.innerHTML = `<span class="choice-label">임직한다</span>`;
-  yes.addEventListener('click', () => { actionOrdainOfficerConfirmed(key); hideModal('eventModal'); });
+  yes.innerHTML = `<span class="choice-label">공동의회 투표에 부친다</span>`;
+  yes.addEventListener('click', () => actionOrdainOfficerConfirmed(key, candidate));
   const no = el('button', 'choice-btn');
   no.innerHTML = `<span class="choice-label">다음에 한다</span>`;
   no.addEventListener('click', () => hideModal('eventModal'));
@@ -1516,19 +1563,44 @@ function showConfirmOrdain(key) {
   showModal('eventModal');
 }
 
-function actionOrdainOfficerConfirmed(key) {
+function actionOrdainOfficerConfirmed(key, candidate) {
   const def = OFFICERS[key];
   if (state.fund < def.cost || state.volunteerFrac < def.volCost) return;
-  state.fund -= def.cost;
-  state.volunteerFrac = Math.max(0, state.volunteerFrac - def.volCost);
-  state.volunteers = Math.floor(state.volunteerFrac);
-  state.officers[key].push(state.week);
-  addLog(`${def.name} 한 분을 새로 임직했습니다(공동의회 투표·노회 고시 절차를 거쳤습니다 — 봉사자 ${def.volCost}명이 위촉되어 쓰였고, 항존직이라 정년까지 계속 시무합니다).`);
+  const approval = officerVoteApprovalRate(state);
+  const roll = clamp(approval + (Math.random() * 0.2 - 0.1), 0, 1);
+  const passed = roll >= OFFICER_VOTE_THRESHOLD;
+  const pct = Math.round(roll * 100);
+  if (passed) {
+    state.fund -= def.cost;
+    state.volunteerFrac = Math.max(0, state.volunteerFrac - def.volCost);
+    state.volunteers = Math.floor(state.volunteerFrac);
+    state.officers[key].push({ week: state.week, name: candidate.name, age: candidate.age, family: candidate.family, tenureYears: candidate.tenureYears });
+    addLog(`공동의회 투표(찬성 ${pct}%)로 ${candidate.name}님이 ${def.name}(으)로 가결·임직되었습니다(노회 고시를 거쳤습니다 — 항존직이라 정년까지 계속 시무합니다).`);
+  } else {
+    const failCost = Math.round(def.cost * 0.3);
+    state.fund = Math.max(0, state.fund - failCost);
+    addLog(`공동의회 투표(찬성 ${pct}%)에서 ${candidate.name}님의 ${def.name} 피택이 2/3 문턱을 넘지 못해 부결되었습니다(준비 비용 ${fmtWon(failCost)} 지출).`);
+  }
   saveGame();
   render();
-  if (key === 'elder' && state.officers.elder.length === 2) {
+  showVoteResult(def, candidate, pct, passed);
+  if (passed && key === 'elder' && state.officers.elder.length === 2) {
     showSessionMilestone();
   }
+}
+
+function showVoteResult(def, candidate, pct, passed) {
+  document.getElementById('eventIcon').src = passed ? 'assets/micon_ui_check.png' : 'assets/micon_ui_warning.png';
+  document.getElementById('eventTitle').textContent = passed ? '가결되었습니다' : '부결되었습니다';
+  document.getElementById('eventBody').textContent =
+    `${candidate.name}님의 ${def.name} 피택에 대한 공동의회 투표 결과: 찬성 ${pct}%(2/3 이상 필요)\n\n` +
+    (passed ? `${def.name}(으)로 임직되었습니다.` : '다음 기회에 다시 추천해 보세요.');
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  const okBtn = el('button', 'btn btn-primary result-ok-btn', '확인');
+  okBtn.addEventListener('click', () => hideModal('eventModal'));
+  box.appendChild(okBtn);
+  showModal('eventModal');
 }
 
 function showSessionMilestone() {
@@ -2092,15 +2164,15 @@ function renderRoster() {
         </div>
       </div>`;
     wrap.appendChild(card);
-    list.forEach((week, idx) => {
-      const p = officerDisplayProfile(key, week, idx);
+    list.forEach((entry, idx) => {
+      const p = typeof entry === 'object' ? entry : officerDisplayProfile(key, entry, idx); // 구버전(주차 숫자만) 저장 호환
       const personCard = el('div', 'card');
       personCard.innerHTML = `
         <div class="card-row">
           <img class="card-emoji-img" src="assets/${OFFICERS[key].icon}" alt="">
           <div class="card-main">
             <div class="card-title">${p.name} <span class="card-level">${officerNames[key]}·${p.age}세</span></div>
-            <div class="card-sub">${p.family}</div>
+            <div class="card-sub">${p.family}${p.tenureYears ? ` · 등록 ${p.tenureYears}년차` : ''}</div>
           </div>
         </div>`;
       wrap.appendChild(personCard);
