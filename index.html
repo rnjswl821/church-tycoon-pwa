@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>교회 경영 시뮬레이션</title>
+<meta name="description" content="교회를 세우고 성도를 섬기며 함께 성장시키는 경영 시뮬레이션 게임">
+<meta name="theme-color" content="#3a5a96">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="topbar-title">
+      <span class="topbar-icon">⛪</span>
+      <input id="churchName" class="church-name-input" maxlength="14" value="은혜교회" aria-label="교회 이름">
+      <span id="tierBadge" class="tier-badge">씨앗교회</span>
+    </div>
+    <div class="topbar-week">
+      <span id="weekLabel" class="pixel-font">개척 0개월</span>
+    </div>
+  </header>
+
+  <section class="scene-wrap">
+    <canvas id="scene" width="320" height="208"></canvas>
+    <div class="scene-hint" id="sceneHint">건물을 탭해보세요</div>
+  </section>
+
+  <section class="stat-bar" id="statBar">
+    <div class="stat" data-stat="fund">
+      <img class="stat-icon" src="assets/icon_fund.png" alt="">
+      <span class="stat-label">운영기금</span>
+      <span class="stat-value" id="statFund">0</span>
+    </div>
+    <div class="stat" data-stat="members">
+      <img class="stat-icon" src="assets/icon_members.png" alt="">
+      <span class="stat-label">성도수</span>
+      <span class="stat-value" id="statMembers">0</span>
+    </div>
+    <div class="stat" data-stat="faith">
+      <img class="stat-icon" src="assets/icon_faith.png" alt="">
+      <span class="stat-label">신앙지수</span>
+      <span class="stat-value" id="statFaith">0</span>
+    </div>
+    <div class="stat" data-stat="reputation">
+      <img class="stat-icon" src="assets/icon_reputation.png" alt="">
+      <span class="stat-label">지역신뢰</span>
+      <span class="stat-value" id="statReputation">0</span>
+    </div>
+    <div class="stat" data-stat="volunteers">
+      <img class="stat-icon" src="assets/icon_volunteers.png" alt="">
+      <span class="stat-label">봉사자</span>
+      <span class="stat-value" id="statVolunteers">0</span>
+    </div>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="dashboard">대시보드</button>
+    <button class="tab-btn" data-tab="campaigns">행사</button>
+    <button class="tab-btn" data-tab="buildings">건물</button>
+    <button class="tab-btn" data-tab="ministries">사역</button>
+    <button class="tab-btn" data-tab="staff">사역자</button>
+    <button class="tab-btn" data-tab="log">기록</button>
+  </nav>
+
+  <main id="tabContent" class="tab-content"></main>
+
+  <footer class="action-bar">
+    <button id="resetBtn" class="btn btn-ghost btn-icon" title="새로 시작" aria-label="새로 시작">🔄</button>
+    <span id="saveIndicator" class="save-indicator" title="자동 저장됨">●</span>
+    <div class="action-right">
+      <button id="autoToggleBtn" class="btn btn-primary" aria-pressed="true">⏸ 시간이 흐르는 중</button>
+    </div>
+  </footer>
+
+</div>
+
+<div id="eventModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-icon" id="eventIcon">📖</div>
+    <h2 id="eventTitle" class="modal-title"></h2>
+    <p id="eventBody" class="modal-body"></p>
+    <div id="eventChoices" class="modal-choices"></div>
+  </div>
+</div>
+
+<div id="milestoneModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal modal-milestone">
+    <div class="modal-icon">✨</div>
+    <h2 id="milestoneTitle" class="modal-title"></h2>
+    <p id="milestoneBody" class="modal-body"></p>
+    <button id="milestoneCloseBtn" class="btn btn-primary">계속하기</button>
+  </div>
+</div>
+
+<script src="scene.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
