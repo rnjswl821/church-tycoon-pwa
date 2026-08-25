@@ -239,6 +239,20 @@ function officerDisplayName(roleKey, ordainedWeek, idx) {
   return CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
 }
 
+/* 일반 성도 개별 열람(오너 지시) — 수천~수만 명이 될 수 있어 한 번에 전부 DOM에 그리면
+   느려지므로, "더 보기" 방식으로 필요한 만큼만 점진적으로 불러온다. 각 성도의 이름·나이는
+   순번을 시드로 한 결정론적 값이라 다시 렌더링해도 매번 같은 사람으로 나온다. */
+const GENERAL_MEMBERS_PAGE = 50;
+let generalMembersShown = GENERAL_MEMBERS_PAGE;
+
+function generalMemberProfile(i) {
+  const rnd = seededRng(hashStr('genmember:' + i));
+  const gender = rnd() < 0.5 ? 'M' : 'F';
+  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+  const age = 8 + Math.floor(rnd() * 72);
+  return { name, gender, age };
+}
+
 const MINISTRIES = {
   dawn_prayer: {
     name: '새벽기도', icon: 'micon_m_dawn.png',
@@ -1036,6 +1050,22 @@ function computeUpkeep(s) {
   return total;
 }
 
+/* 지출도 종류별로 나눠 보여준다(오너 지시) — 수입 쪽(OFFERING_TYPES)은 가상의 비율 분해였지만
+   이쪽은 실제로 이미 나뉘어 있는 항목(담임목사·부교역자·사역·부서)을 그대로 합산해 보여준다. */
+function upkeepBreakdown(s) {
+  const rows = [{ name: '담임목사 사례비', amount: pastorWeeklySalary(s) }];
+  let staffTotal = 0;
+  for (const key in STAFF) if (s.staffHired[key]) staffTotal += staffWeeklySalary(key, s.staffHired[key]);
+  if (staffTotal > 0) rows.push({ name: '부교역자 사례비', amount: staffTotal });
+  let minTotal = 0;
+  for (const key in MINISTRIES) if (s.ministriesActive[key]) minTotal += MINISTRIES[key].upkeep;
+  if (minTotal > 0) rows.push({ name: '사역 유지비', amount: minTotal });
+  let deptTotal = 0;
+  for (const key in DEPARTMENTS) if (s.departmentsActive[key]) deptTotal += DEPARTMENTS[key].upkeep;
+  if (deptTotal > 0) rows.push({ name: '부서 유지비', amount: deptTotal });
+  return rows;
+}
+
 function isNeglected(s) {
   const anyMinistry = Object.keys(s.ministriesActive).some((k) => s.ministriesActive[k]);
   const anyDept = Object.keys(s.departmentsActive).some((k) => s.departmentsActive[k]);
@@ -1678,6 +1708,9 @@ function buildSummaryRowsHtml(summary) {
     rows.push(`<div class="dash-summary-row dash-summary-sub"><span>ㄴ ${t.name}</span><span class="delta-zero">${fmtWon(summary.income * t.ratio)}</span></div>`);
   });
   rows.push(summaryRow('사역과 사례비 지출', `-${fmtWon(summary.upkeep)}`, 'neg'));
+  upkeepBreakdown(state).forEach((r) => {
+    rows.push(`<div class="dash-summary-row dash-summary-sub"><span>ㄴ ${r.name}</span><span class="delta-zero">${fmtWon(r.amount)}</span></div>`);
+  });
   if (summary.neglected) rows.push(summaryRow('방치 관리비', `-${fmtWon(summary.neglectOverhead)}`, 'neg'));
   rows.push(summaryRow('순 증감', `${summary.net >= 0 ? '+' : ''}${fmtWon(summary.net)}`, summary.net >= 0 ? 'pos' : 'neg'));
   rows.push(summaryRow('신앙지수', summaryDeltaText(summary.faithDelta), summary.faithDelta > 0 ? 'pos' : summary.faithDelta < 0 ? 'neg' : 'zero'));
@@ -1843,16 +1876,28 @@ function renderRoster() {
   const namedCount = 1 + staffCount + officerCount; // 담임목사 + 부교역자 + 직분자
   const generalCount = Math.max(0, state.members - namedCount);
   if (generalCount > 0) {
-    const generalCard = el('div', 'card');
-    generalCard.innerHTML = `
-      <div class="card-row">
-        <img class="card-emoji-img" src="assets/micon_ui_people.png" alt="">
-        <div class="card-main">
-          <div class="card-title">일반 성도 <span class="card-level">${fmt(generalCount)}명</span></div>
-          <div class="card-sub">개별 명단 없이 인원수로 관리되는 나머지 성도들입니다.</div>
-        </div>
-      </div>`;
-    wrap.appendChild(generalCard);
+    wrap.appendChild(el('div', 'section-title', `일반 성도 (${fmt(generalCount)}명)`));
+    const shown = Math.min(generalMembersShown, generalCount);
+    for (let i = 0; i < shown; i++) {
+      const p = generalMemberProfile(i);
+      const card = el('div', 'card');
+      card.innerHTML = `
+        <div class="card-row">
+          <img class="card-emoji-img" src="assets/micon_ui_people.png" alt="">
+          <div class="card-main">
+            <div class="card-title">${p.name} <span class="card-level">${genderLabel(p.gender)}·${p.age}세</span></div>
+            <div class="card-sub">일반 성도</div>
+          </div>
+        </div>`;
+      wrap.appendChild(card);
+    }
+    if (shown < generalCount) {
+      const remain = generalCount - shown;
+      const moreBtn = el('button', 'btn btn-outline btn-small', `${fmt(Math.min(GENERAL_MEMBERS_PAGE, remain))}명 더 보기 (${fmt(remain)}명 남음)`);
+      moreBtn.style.width = '100%';
+      moreBtn.addEventListener('click', () => { generalMembersShown += GENERAL_MEMBERS_PAGE; render(); });
+      wrap.appendChild(moreBtn);
+    }
   }
 
   if (staffCount === 0 && officerCount === 0 && state.members <= 1) {
