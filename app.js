@@ -813,6 +813,17 @@ const OFFICERS = {
 
 /* ===================== 유틸 ===================== */
 
+/* 재정 수입 내역을 종류별로 나눠 보여준다(오너 지시) — 실제 총 수입 계산식은 그대로 두고,
+   표시할 때만 비율로 쪼갠다(밸런스에 영향 없는 순수 표시용 분해). 비율은 국내 교회 헌금
+   구성비의 통상적인 인상을 반영한 근사치. */
+const OFFERING_TYPES = [
+  { key: 'tithe', name: '십일조', ratio: 0.40 },
+  { key: 'sunday', name: '주일헌금', ratio: 0.30 },
+  { key: 'thanks', name: '감사헌금', ratio: 0.15 },
+  { key: 'mission', name: '선교헌금', ratio: 0.10 },
+  { key: 'other', name: '기타헌금', ratio: 0.05 },
+];
+
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 function fmt(n) { return Math.round(n).toLocaleString('ko-KR'); }
 
@@ -1663,6 +1674,9 @@ function summaryDeltaText(v) {
 function buildSummaryRowsHtml(summary) {
   const rows = [];
   rows.push(summaryRow('교회 재정 수입', `+${fmtWon(summary.income)}`, 'pos'));
+  OFFERING_TYPES.forEach((t) => {
+    rows.push(`<div class="dash-summary-row dash-summary-sub"><span>ㄴ ${t.name}</span><span class="delta-zero">${fmtWon(summary.income * t.ratio)}</span></div>`);
+  });
   rows.push(summaryRow('사역과 사례비 지출', `-${fmtWon(summary.upkeep)}`, 'neg'));
   if (summary.neglected) rows.push(summaryRow('방치 관리비', `-${fmtWon(summary.neglectOverhead)}`, 'neg'));
   rows.push(summaryRow('순 증감', `${summary.net >= 0 ? '+' : ''}${fmtWon(summary.net)}`, summary.net >= 0 ? 'pos' : 'neg'));
