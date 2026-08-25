@@ -846,38 +846,44 @@ try { isFirstEverLaunch = !localStorage.getItem(STORAGE_KEY); } catch (e) { /* i
 let state = loadGame() || newGame();
 let currentTab = 'dashboard';
 
+/* loadGame()과 저장파일 불러오기(import) 양쪽에서 공유하는 마이그레이션 로직 —
+   구버전 저장이나 내보내기 파일이 최신 필드 구조를 갖추도록 보정한다.
+   유효한 저장이 아니면(week 필드 없음) null을 반환한다. */
+function migrateSave(s) {
+  if (!s || typeof s.week !== 'number') return null;
+  if (!s.officers) s.officers = { elder: 0, deacon: 0, exhorter: 0 };
+  if (!s.recentEventIds) s.recentEventIds = [];
+  if (typeof s.lastEventWeek !== 'number') s.lastEventWeek = s.week;
+  if (typeof s.endingShown !== 'boolean') s.endingShown = false;
+  if (!s.lastSavedAt) s.lastSavedAt = Date.now();
+  if (!s.departmentsActive) s.departmentsActive = {};
+  if (!s.candidateGen) s.candidateGen = {};
+  if (!s.boostItems) s.boostItems = { small: 0, medium: 0, large: 0 };
+  if (typeof s.speedBoostMultiplier !== 'number') s.speedBoostMultiplier = 1;
+  if (typeof s.speedBoostUntil !== 'number') s.speedBoostUntil = 0;
+  if (typeof s.speedBoostKey === 'undefined') s.speedBoostKey = null;
+  if (!s.gameStartDate) s.gameStartDate = new Date().toISOString().slice(0, 10);
+  for (const k of ['elder', 'deacon', 'exhorter']) {
+    if (typeof s.officers[k] === 'number') {
+      const n = s.officers[k];
+      s.officers[k] = [];
+      for (let i = 0; i < n; i++) s.officers[k].push(s.week); // 구버전(숫자 카운트) 호환 — 임직 주차 배열로 변환
+    } else if (!Array.isArray(s.officers[k])) {
+      s.officers[k] = [];
+    }
+  }
+  for (const k in (s.staffHired || {})) {
+    if (s.staffHired[k] === true) s.staffHired[k] = null; // 구버전(불리언) 저장 호환 — 이름 있는 후보자로 다시 청빙 필요
+    if (s.staffHired[k] === false) s.staffHired[k] = null;
+  }
+  return s;
+}
+
 function loadGame() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (typeof s.week !== 'number') return null;
-    if (!s.officers) s.officers = { elder: 0, deacon: 0, exhorter: 0 };
-    if (!s.recentEventIds) s.recentEventIds = [];
-    if (typeof s.lastEventWeek !== 'number') s.lastEventWeek = s.week;
-    if (typeof s.endingShown !== 'boolean') s.endingShown = false;
-    if (!s.lastSavedAt) s.lastSavedAt = Date.now();
-    if (!s.departmentsActive) s.departmentsActive = {};
-    if (!s.candidateGen) s.candidateGen = {};
-    if (!s.boostItems) s.boostItems = { small: 0, medium: 0, large: 0 };
-    if (typeof s.speedBoostMultiplier !== 'number') s.speedBoostMultiplier = 1;
-    if (typeof s.speedBoostUntil !== 'number') s.speedBoostUntil = 0;
-    if (typeof s.speedBoostKey === 'undefined') s.speedBoostKey = null;
-    if (!s.gameStartDate) s.gameStartDate = new Date().toISOString().slice(0, 10);
-    for (const k of ['elder', 'deacon', 'exhorter']) {
-      if (typeof s.officers[k] === 'number') {
-        const n = s.officers[k];
-        s.officers[k] = [];
-        for (let i = 0; i < n; i++) s.officers[k].push(s.week); // 구버전(숫자 카운트) 호환 — 임직 주차 배열로 변환
-      } else if (!Array.isArray(s.officers[k])) {
-        s.officers[k] = [];
-      }
-    }
-    for (const k in (s.staffHired || {})) {
-      if (s.staffHired[k] === true) s.staffHired[k] = null; // 구버전(불리언) 저장 호환 — 이름 있는 후보자로 다시 청빙 필요
-      if (s.staffHired[k] === false) s.staffHired[k] = null;
-    }
-    return s;
+    return migrateSave(JSON.parse(raw));
   } catch (e) { return null; }
 }
 
@@ -1227,6 +1233,79 @@ function actionResetGame() {
   currentTab = 'dashboard';
   saveGame();
   render();
+}
+
+/* ===================== 저장 파일 내보내기·불러오기 =====================
+   일반 모바일게임의 "저장" 개념을 이 기기·이 브라우저에만 묶인 자동저장(localStorage)
+   너머로 확장한다 — 파일로 내보내 보관해두면 기기를 바꾸거나 브라우저 데이터를 지워도
+   그 파일로 불러와 이어할 수 있다. 아티팩트(claude.ai) 미리보기 샌드박스에서는 다운로드가
+   막혀 있어 이 기능이 동작하지 않을 수 있다 — GitHub Pages 정식 배포판에서 정상 동작한다. */
+function actionExportSave() {
+  try {
+    const json = JSON.stringify(state, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `목회타이쿤_${state.name}_${state.week}주차_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    addLog('저장 파일을 내보냈습니다.');
+    saveGame();
+  } catch (e) { /* 다운로드가 막힌 환경(예: 아티팩트 미리보기)에서는 조용히 무시 */ }
+}
+
+function actionImportSaveFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed = null;
+    try { parsed = migrateSave(JSON.parse(String(reader.result))); } catch (e) { parsed = null; }
+    if (!parsed) {
+      showImportResult(false, '올바른 저장 파일이 아닙니다.');
+      return;
+    }
+    showConfirmImport(parsed);
+  };
+  reader.readAsText(file);
+}
+
+function showConfirmImport(parsed) {
+  document.getElementById('eventIcon').textContent = '📂';
+  document.getElementById('eventTitle').textContent = '이 저장 파일을 불러올까요?';
+  document.getElementById('eventBody').textContent =
+    `"${parsed.name}" · ${parsed.week}주차 · 성도 ${fmt(parsed.members)}명\n\n지금 진행 중인 내용은 사라지고 이 저장 파일로 덮어씁니다.`;
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  const yes = el('button', 'choice-btn');
+  yes.innerHTML = `<span class="choice-label">불러온다</span>`;
+  yes.addEventListener('click', () => {
+    state = parsed;
+    currentTab = 'dashboard';
+    saveGame();
+    render();
+    hideModal('eventModal');
+  });
+  const no = el('button', 'choice-btn');
+  no.innerHTML = `<span class="choice-label">취소한다</span>`;
+  no.addEventListener('click', () => hideModal('eventModal'));
+  box.appendChild(yes);
+  box.appendChild(no);
+  showModal('eventModal');
+}
+
+function showImportResult(ok, message) {
+  document.getElementById('eventIcon').textContent = ok ? '✅' : '⚠️';
+  document.getElementById('eventTitle').textContent = ok ? '불러오기 완료' : '불러오기 실패';
+  document.getElementById('eventBody').textContent = message;
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  const okBtn = el('button', 'btn btn-primary result-ok-btn', '확인');
+  okBtn.addEventListener('click', () => hideModal('eventModal'));
+  box.appendChild(okBtn);
+  showModal('eventModal');
 }
 
 /* ===================== 렌더링 ===================== */
@@ -1648,6 +1727,26 @@ function renderStaff() {
 
 function renderLog() {
   const wrap = el('div');
+
+  wrap.appendChild(el('div', 'section-title', '저장 관리'));
+  const saveCard = el('div', 'card');
+  saveCard.innerHTML = `
+    <div class="card-title">💾 저장 파일 내보내기·불러오기</div>
+    <div class="card-sub">이 기기·이 브라우저에는 자동으로 저장되지만, 기기를 바꾸거나 브라우저 데이터를 지우면 사라집니다. 파일로 내보내 보관해두면 다른 기기에서도 이어할 수 있습니다.</div>
+    <div class="card-row" style="margin-top:10px; gap:6px">
+      <button class="btn btn-outline btn-small" id="exportSaveBtn">내보내기</button>
+      <button class="btn btn-outline btn-small" id="importSaveBtn">불러오기</button>
+    </div>
+    <input type="file" id="importSaveInput" accept="application/json" style="display:none">`;
+  wrap.appendChild(saveCard);
+  saveCard.querySelector('#exportSaveBtn').addEventListener('click', actionExportSave);
+  const importInput = saveCard.querySelector('#importSaveInput');
+  saveCard.querySelector('#importSaveBtn').addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', () => {
+    if (importInput.files && importInput.files[0]) actionImportSaveFile(importInput.files[0]);
+    importInput.value = '';
+  });
+
   wrap.appendChild(el('div', 'section-title', '지난 발자취'));
   if (!state.logs.length) {
     wrap.appendChild(el('div', 'log-empty', '아직 기록이 없습니다. 다음 주로 넘어가 보세요.'));
