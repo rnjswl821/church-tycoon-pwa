@@ -1277,17 +1277,45 @@ function actionCampaign(key) {
   render();
 }
 
+/* 임직은 봉사자 풀에서 인원을 차출한다 — 항존직이라 한번 임직하면 되돌아오지 않으므로
+   (9차에서 자동만료 로직을 제거함), "왜 봉사자가 줄었지?" 하고 놀라지 않도록 임직 전에
+   반드시 확인창을 거치게 했다(오너 지시: "플레이상 해결방법을 만들어달라"). */
 function actionOrdainOfficer(key) {
   const def = OFFICERS[key];
   const count = (state.officers[key] || []).length;
   if (count >= officerMaxFor(state)) return;
   if (!def.unlock(state)) return;
   if (state.fund < def.cost || state.volunteerFrac < def.volCost) return;
+  showConfirmOrdain(key);
+}
+
+function showConfirmOrdain(key) {
+  const def = OFFICERS[key];
+  document.getElementById('eventIcon').textContent = def.icon;
+  document.getElementById('eventTitle').textContent = `${def.name}를 임직할까요?`;
+  document.getElementById('eventBody').textContent =
+    `${fmtWon(def.cost)}과 봉사자 ${def.volCost}명이 이 분께 위촉되어 쓰입니다.\n\n항존직이라 한번 임직하면 정년까지 계속 시무하며, 위촉된 봉사자는 봉사자 수로 돌아오지 않습니다.`;
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  const yes = el('button', 'choice-btn');
+  yes.innerHTML = `<span class="choice-label">임직한다</span>`;
+  yes.addEventListener('click', () => { actionOrdainOfficerConfirmed(key); hideModal('eventModal'); });
+  const no = el('button', 'choice-btn');
+  no.innerHTML = `<span class="choice-label">다음에 한다</span>`;
+  no.addEventListener('click', () => hideModal('eventModal'));
+  box.appendChild(yes);
+  box.appendChild(no);
+  showModal('eventModal');
+}
+
+function actionOrdainOfficerConfirmed(key) {
+  const def = OFFICERS[key];
+  if (state.fund < def.cost || state.volunteerFrac < def.volCost) return;
   state.fund -= def.cost;
   state.volunteerFrac = Math.max(0, state.volunteerFrac - def.volCost);
   state.volunteers = Math.floor(state.volunteerFrac);
   state.officers[key].push(state.week);
-  addLog(`${def.name} 한 분을 새로 임직했습니다(공동의회 투표·노회 고시 절차를 거쳤습니다 — 항존직이라 정년까지 계속 시무합니다).`);
+  addLog(`${def.name} 한 분을 새로 임직했습니다(공동의회 투표·노회 고시 절차를 거쳤습니다 — 봉사자 ${def.volCost}명이 위촉되어 쓰였고, 항존직이라 정년까지 계속 시무합니다).`);
   saveGame();
   render();
   if (key === 'elder' && state.officers.elder.length === 2) {
