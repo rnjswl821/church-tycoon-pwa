@@ -544,6 +544,17 @@ body {
 .result-ok-btn { width: 100%; margin-top: 10px; }
 .modal-choices .dash-summary { text-align: left; margin-bottom: 4px; }
 
+/* 팝업 선택지 2단계 확정(선택→확정) — 오조작 방지용 빨간 점 표시 */
+.choice-btn-markable { position: relative; padding-right: 34px; }
+.choice-mark {
+  position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 2px solid var(--border); background: transparent; transition: background .12s, border-color .12s;
+}
+.choice-btn-markable.selected { border-color: var(--bad); background: var(--bad-tint); }
+.choice-btn-markable.selected .choice-mark { background: var(--bad); border-color: var(--bad); }
+.choice-confirm-hint { font-size: 11px; color: var(--ink-soft); text-align: center; margin-top: 2px; }
+
 /* ---------------------------------------------------------------- 가로모드
    (오너 지시: "플레이 폼팩터 자체를 모바일 가로모드로 해서 다시 제작") — 실제 폰을 옆으로
    눕혔을 때만 좌측(씬+스탯) / 우측(탭+콘텐츠) 2단 레이아웃으로 바뀐다. 세로 모드 레이아웃은

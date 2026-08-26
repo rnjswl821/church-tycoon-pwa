@@ -544,20 +544,17 @@ function showPersonalEvent(ref, template) {
   document.getElementById('eventTitle').textContent = template.title;
   document.getElementById('eventBody').textContent = template.body(ref.person.name);
   const box = document.getElementById('eventChoices');
-  box.innerHTML = '';
-  PERSONAL_EVENT_CHOICES.forEach((c) => {
-    const btn = el('button', 'choice-btn');
-    btn.innerHTML = `<span class="choice-label">${c.label}</span>`;
-    btn.addEventListener('click', () => {
+  renderConfirmableChoices(box, PERSONAL_EVENT_CHOICES.map((c) => ({
+    label: c.label,
+    onConfirm: () => {
       if (c.cost) state.fund = Math.max(0, state.fund - c.cost);
       ref.person.wellbeing = clamp((ref.person.wellbeing || 70) + c.wellbeingDelta, 0, 100);
       addLog(`${ref.person.name}님의 개인사에 "${c.label}"(으)로 응답했습니다(신앙 상태 ${c.wellbeingDelta >= 0 ? '+' : ''}${c.wellbeingDelta}).`);
       saveGame();
       render();
       hideModal('eventModal');
-    });
-    box.appendChild(btn);
-  });
+    },
+  })));
   showModal('eventModal');
 }
 
@@ -2453,16 +2450,48 @@ function snapshotStats(s) {
   return { fund: s.fund, members: s.members, faith: s.faith, reputation: s.reputation, volunteers: s.volunteers };
 }
 
+/* 자동진행 중 예고 없이 뜨는 팝업(일반 이벤트·개인사 이벤트)은 탭 한 번으로 바로 실행하지
+   않고 2단계로 나눈다 — 첫 탭은 그 선택지에 빨간 점 표시만 남기고(선택), 확정 버튼을 한 번
+   더 눌러야 실제로 실행된다(확정). 화면 어딘가를 누르던 손가락 위치에 팝업이 갑자기 뜨면서
+   의도치 않은 선택이 즉시 실행돼버리는 문제(베타테스터 Coony 제보)를 막기 위함 — 오조작이
+   나도 표시만 되고 확정을 따로 눌러야 하니 되돌릴 여지가 생긴다. 플레이어가 직접 연 확인창
+   (임직·초기화 등)은 애초에 팝업이 "예고 없이" 뜨는 상황이 아니라서 대상이 아니다. */
+function renderConfirmableChoices(box, choices) {
+  box.innerHTML = '';
+  let selected = null;
+  const btns = choices.map((c, i) => {
+    const btn = el('button', 'choice-btn choice-btn-markable');
+    btn.innerHTML = `<span class="choice-mark"></span><span class="choice-label">${c.label}</span>`;
+    btn.addEventListener('click', () => {
+      selected = i;
+      btns.forEach((b, j) => b.classList.toggle('selected', j === i));
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = `"${c.label}" 확정하기`;
+    });
+    box.appendChild(btn);
+    return btn;
+  });
+  const hint = el('div', 'choice-confirm-hint');
+  hint.textContent = '선택지를 누르면 표시만 되고, 아래 버튼을 눌러야 확정됩니다';
+  box.appendChild(hint);
+  const confirmBtn = el('button', 'btn btn-primary result-ok-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = '선택 후 확정하기';
+  confirmBtn.addEventListener('click', () => {
+    if (selected == null) return;
+    choices[selected].onConfirm();
+  });
+  box.appendChild(confirmBtn);
+}
+
 function showEvent(ev) {
   document.getElementById('eventIcon').src = 'assets/' + ev.icon;
   document.getElementById('eventTitle').textContent = ev.title;
   document.getElementById('eventBody').textContent = ev.body;
   const choicesBox = document.getElementById('eventChoices');
-  choicesBox.innerHTML = '';
-  ev.choices.forEach((c) => {
-    const btn = el('button', 'choice-btn');
-    btn.innerHTML = `<span class="choice-label">${c.label}</span>`;
-    btn.addEventListener('click', () => {
+  renderConfirmableChoices(choicesBox, ev.choices.map((c) => ({
+    label: c.label,
+    onConfirm: () => {
       const before = snapshotStats(state);
       const msg = c.apply(state);
       const after = snapshotStats(state);
@@ -2470,9 +2499,8 @@ function showEvent(ev) {
       saveGame();
       render();
       showEventResult(ev, msg, before, after);
-    });
-    choicesBox.appendChild(btn);
-  });
+    },
+  })));
   showModal('eventModal');
 }
 
