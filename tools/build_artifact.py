@@ -35,7 +35,7 @@ body_start = html.index('<div id="splashScreen"')
 body_end = html.index('<script src="scene.js">')
 body_content = html[body_start:body_end].strip()
 
-title = "목회타이쿤"
+title = "목양타이쿤"
 description_meta = '<meta name="description" content="교회를 세우고 성도를 섬기며 함께 성장시키는 목회 경영 시뮬레이션 게임">'
 
 sprite_json = json.dumps(sprite_data, ensure_ascii=False)

@@ -1,6 +1,6 @@
 {
-  "name": "목회타이쿤",
-  "short_name": "목회타이쿤",
+  "name": "목양타이쿤",
+  "short_name": "목양타이쿤",
   "description": "교회를 세우고 성도를 섬기며 함께 성장시키는 목회 경영 시뮬레이션 게임",
   "start_url": "./index.html",
   "scope": "./",

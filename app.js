@@ -1767,7 +1767,7 @@ function exportSlotData(data, n) {
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `목회타이쿤_${data.name}_${data.week}주차_슬롯${n}_${stamp}.json`;
+    a.download = `목양타이쿤_${data.name}_${data.week}주차_슬롯${n}_${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
