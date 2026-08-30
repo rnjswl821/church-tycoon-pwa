@@ -169,12 +169,16 @@ function staffWeeklySalary(key, candidate) {
   return base + ((candidate && candidate.housing) ? HOUSING_WEEKLY_COST : 0);
 }
 
-/* 담임목사(플레이어) 사례비 — 그동안 지출 목록에 아예 없던 것을 오너 지시로 추가했다.
-   1.0배가 2026년 시세 조사 기준 표준 사례비, 0.5~2.0배 사이에서 직접 조정할 수 있다.
-   너무 박봉(0.7배 미만)이면 사기가 떨어져 신앙지수가 조금씩 더 깎이고, 넉넉히(1.0배 초과)
-   책정하면 아주 소폭(최대 +0.2/주) 신앙지수에 보탬이 된다 — 다만 상한을 낮게 잡아 "사례비만
-   올리면 이긴다"는 식으로 다른 투자를 밀어내는 지배전략이 되지 않도록 했다. */
-const PASTOR_BASE_MONTHLY_SALARY = 3500000;
+/* 담임목사(플레이어) 사례비 — 0.5~2.0배 사이에서 직접 조정할 수 있다. 너무 박봉(0.7배
+   미만)이면 사기가 떨어져 신앙지수가 조금씩 더 깎이고, 넉넉히(1.0배 초과) 책정하면 아주
+   소폭(최대 +0.2/주) 신앙지수에 보탬이 된다 — 다만 상한을 낮게 잡아 "사례비만 올리면
+   이긴다"는 식으로 다른 투자를 밀어내는 지배전략이 되지 않도록 했다.
+   기준액 350만원이던 최초 설정은 실측해보니 최저(0.5배·주 403,846원)로 낮춰도 손익분기점이
+   성도 27명이었다(시작 성도는 12명) — 베타테스터 Coony의 "초반에 돈이 너무 부족했다" 피드백의
+   실제 원인이었다. 180만원으로 낮춰 최저 배율 손익분기점을 시작 인원(12명) 근처인 14명으로
+   당겼다 — 기본값(1.0배)은 여전히 27명 안팎이 필요해, "낮춰서 버티기 vs 넉넉히 주고
+   빨리 키우기"라는 선택 자체는 그대로 살아있다. */
+const PASTOR_BASE_MONTHLY_SALARY = 1800000;
 const PASTOR_SALARY_MIN_MULT = 0.5;
 const PASTOR_SALARY_MAX_MULT = 2.0;
 const PASTOR_SALARY_STEP = 0.1;
@@ -591,10 +595,14 @@ const CAMPAIGNS = {
    두 갈래: ① 성장 단계(TIERS)가 오를 때마다 자동 지급(초반 단계는 소, 후반 단계는 대 —
    플레이가 진행될수록 더 큰 보상), ② 교회 재정으로 즉시 구매(행사 탭). 사용 중에는 중첩 없이
    하나만 활성화된다(동시에 여러 배속이 겹치는 혼란 방지). */
+/* durationMs는 실시간 고정값이라, 시간속도(1주당 실시간 초)가 빨라질수록 같은 지속시간이
+   덮는 "주차 수"가 그만큼 늘어나 가속권 가치가 저절로 커진다. 30초/주 → 15초/주로 반토막낸
+   이번 세션에서 지속시간도 함께 반으로 줄여, 가속권 1회가 덮는 주차 수(=효과)를 이전과
+   동일하게 유지했다(자체 점검 2026-08-27). */
 const BOOST_ITEMS = {
-  small:  { name: '가속권(소)', icon: 'micon_boost_small.png', mult: 2, durationMs: 20 * 60 * 1000, cost: 2000000,  desc: '20분 동안 시간의 흐름이 2배 빨라집니다.' },
-  medium: { name: '가속권(중)', icon: 'micon_boost_medium.png', mult: 3, durationMs: 30 * 60 * 1000, cost: 6000000,  desc: '30분 동안 시간의 흐름이 3배 빨라집니다.' },
-  large:  { name: '가속권(대)', icon: 'micon_boost_large.png', mult: 5, durationMs: 30 * 60 * 1000, cost: 15000000, desc: '30분 동안 시간의 흐름이 5배 빨라집니다.' },
+  small:  { name: '가속권(소)', icon: 'micon_boost_small.png', mult: 2, durationMs: 10 * 60 * 1000, cost: 2000000,  desc: '10분 동안 시간의 흐름이 2배 빨라집니다.' },
+  medium: { name: '가속권(중)', icon: 'micon_boost_medium.png', mult: 3, durationMs: 15 * 60 * 1000, cost: 6000000,  desc: '15분 동안 시간의 흐름이 3배 빨라집니다.' },
+  large:  { name: '가속권(대)', icon: 'micon_boost_large.png', mult: 5, durationMs: 15 * 60 * 1000, cost: 15000000, desc: '15분 동안 시간의 흐름이 5배 빨라집니다.' },
 };
 /* 성장 단계(TIERS, 총 10단계)를 3구간으로 나눠 초반엔 소, 중반엔 중, 후반엔 대를 지급한다. */
 function boostGrantFor(tierKey) {
@@ -971,7 +979,7 @@ const OFFICER_MIN_TENURE = { elder: 3, deacon: 2, exhorter: 2 };
 const OFFICERS = {
   elder: {
     name: '장로', icon: 'micon_o_elder.png',
-    desc: '만 40~66세, 등록 3년 이상 된 세례교인 중 신망 있는 이를 공동의회 2/3 이상 찬성으로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
+    desc: '만 40~66세, 등록 3년 이상 된 세례교인 중 신망 있는 이를 공동의회 2/3 이상 찬성으로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 계속 시무합니다.',
     cost: 500000, volCost: 2,
     unlock: (s) => s.members >= 30 && churchAgeYears(s) >= OFFICER_MIN_TENURE.elder,
     lockDesc: `세례교인(성도) 30명 이상 + 개척 ${OFFICER_MIN_TENURE.elder}년 이상 필요 — 당회 조직요건(제109조)·등록연한(제65조)`,
@@ -979,7 +987,7 @@ const OFFICERS = {
   },
   deacon: {
     name: '집사', icon: 'micon_o_deacon.png',
-    desc: '만 35~66세, 등록 2년 이상 된 성도 중 봉사와 회계, 구제를 섬길 이를 공동의회 2/3 이상 찬성으로 세웁니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 항존직이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
+    desc: '만 35~66세, 등록 2년 이상 된 성도 중 봉사와 회계, 구제를 섬길 이를 공동의회 2/3 이상 찬성으로 세웁니다. 살림을 든든히 맡아 교회의 신뢰를 더합니다(2부 제75~78조). 항존직이라 한번 임직하면 계속 시무합니다.',
     cost: 400000, volCost: 1,
     unlock: (s) => s.volunteers >= 5 && churchAgeYears(s) >= OFFICER_MIN_TENURE.deacon,
     lockDesc: `봉사자 5명 이상 + 개척 ${OFFICER_MIN_TENURE.deacon}년 이상 필요 — 등록연한(제75조)`,
@@ -987,7 +995,7 @@ const OFFICERS = {
   },
   exhorter: {
     name: '권사', icon: 'micon_o_exhorter.png',
-    desc: '만 45~66세, 등록 2년 이상 된 여성도 중 심방을 통해 병자와 약한 이를 위로하고 격려할 이를 공동의회 2/3 이상 찬성으로 세웁니다(2부 제81~84조). 항존직에 준하는 직분이라 한번 임직하면 정년(만 70세)까지 계속 시무합니다.',
+    desc: '만 45~66세, 등록 2년 이상 된 여성도 중 심방을 통해 병자와 약한 이를 위로하고 격려할 이를 공동의회 2/3 이상 찬성으로 세웁니다(2부 제81~84조). 항존직에 준하는 직분이라 한번 임직하면 계속 시무합니다.',
     cost: 400000, volCost: 1,
     unlock: (s) => s.volunteers >= 5 && churchAgeYears(s) >= OFFICER_MIN_TENURE.exhorter,
     lockDesc: `봉사자 5명 이상 + 개척 ${OFFICER_MIN_TENURE.exhorter}년 이상 필요 — 등록연한(제81조)`,
@@ -1122,6 +1130,8 @@ function migrateSave(s) {
   if (typeof s.candidateSeed !== 'number') s.candidateSeed = Math.floor(Math.random() * 1000000000); // 구버전 저장 호환 — 이 판만의 시드를 새로 부여
   if (!Array.isArray(s.campaignHistory)) s.campaignHistory = [];
   if (!s.pastoralDirections || typeof s.pastoralDirections !== 'object') s.pastoralDirections = {};
+  if (typeof s.financialCrisisWeeks !== 'number') s.financialCrisisWeeks = 0;
+  if (!s.tierReached) s.tierReached = 'seed';
   for (const k of ['elder', 'deacon', 'exhorter']) {
     if (typeof s.officers[k] === 'number') {
       const n = s.officers[k];
@@ -1381,9 +1391,11 @@ function advanceWeek() {
 
 /* 이벤트는 매주 뜨지 않는다 — 게임 속 시간으로 "대략 한 달에 한 번" 정도의 리듬을 준다.
    최소 4주(한 달) 간격을 강제한 뒤, 그 이후로는 매주 40% 확률로 발생시켜 평균 간격이
-   4~5주 안팎이 되면서도 기계적으로 똑같은 주차에 반복되지 않게 했다(오너 지시). */
-const EVENT_MIN_GAP_WEEKS = 8;
-const EVENT_TRIGGER_PROB = 0.5;
+   4~5주 안팎이 되면서도 기계적으로 똑같은 주차에 반복되지 않게 했다(오너 지시).
+   ※ 자체 점검(2026-08-27)에서 상수가 각각 8주·50%로 되어 있어 실제 평균 간격이 10주
+   안팎(의도의 2배 이상)이었던 걸 발견 — 위 주석이 처음부터 설명하던 의도대로 되돌렸다. */
+const EVENT_MIN_GAP_WEEKS = 4;
+const EVENT_TRIGGER_PROB = 0.4;
 
 function pickEvent() {
   const pool = EVENTS.filter((e) => !e.available || e.available(state));
@@ -1491,6 +1503,28 @@ function actionHireCandidateConfirmed(key, candidate, assignedTo) {
   addLog(`${def.name} ${candidate.name}을(를) 청빙했습니다.${label ? ` (${label} 담당)` : ''}`);
   saveGame();
   render();
+}
+
+/* 되돌릴 수 없이 즉시 사라지는 행동이라 확인창을 거치도록 했다(자체 점검 2026-08-27 —
+   직분자 임직 시 봉사자 소모 확인창·팝업 선택→확정 2단계와 같은 원칙을 여기만 빠뜨렸었다). */
+function showConfirmReleaseStaff(key) {
+  const def = STAFF[key];
+  const hired = state.staffHired[key];
+  if (!hired) return;
+  document.getElementById('eventIcon').src = 'assets/' + def.icon;
+  document.getElementById('eventTitle').textContent = '내보낼까요?';
+  document.getElementById('eventBody').textContent = `${def.name} ${hired.name}을(를) 내보냅니다. 이 결정은 되돌릴 수 없고, 같은 자리에 다시 청빙하려면 새 후보자 중에서 골라야 합니다.`;
+  const box = document.getElementById('eventChoices');
+  box.innerHTML = '';
+  const yes = el('button', 'choice-btn');
+  yes.innerHTML = `<span class="choice-label">내보낸다</span>`;
+  yes.addEventListener('click', () => { actionReleaseStaff(key); hideModal('eventModal'); });
+  const no = el('button', 'choice-btn');
+  no.innerHTML = `<span class="choice-label">계속 함께한다</span>`;
+  no.addEventListener('click', () => hideModal('eventModal'));
+  box.appendChild(yes);
+  box.appendChild(no);
+  showModal('eventModal');
 }
 
 function actionReleaseStaff(key) {
@@ -2364,7 +2398,7 @@ function renderStaff() {
   }
   wrap.querySelectorAll('[data-candidate-hire]').forEach((b) => b.addEventListener('click', () => actionHireCandidate(b.dataset.candidateHire, Number(b.dataset.candidateIdx))));
   wrap.querySelectorAll('[data-reroll]').forEach((b) => b.addEventListener('click', () => actionRerollCandidates(b.dataset.reroll)));
-  wrap.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', () => actionReleaseStaff(b.dataset.release)));
+  wrap.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', () => showConfirmReleaseStaff(b.dataset.release)));
   wrap.querySelectorAll('[data-housing]').forEach((b) => b.addEventListener('change', () => actionToggleHousing(b.dataset.housing)));
 
   wrap.appendChild(el('div', 'section-title', '직분자 임직 — 고신헌법 2부(관리표준) 기준'));
@@ -2424,6 +2458,19 @@ function renderLog() {
     if (importInput.files && importInput.files[0]) actionImportSaveFile(importInput.files[0]);
     importInput.value = '';
   });
+
+  wrap.appendChild(collapsibleHeader('updateLog', '업데이트 소식', true));
+  if (!collapsedSections.updateLog) {
+    const updCard = el('div', 'card');
+    UPDATE_LOG.forEach((entry) => {
+      const item = el('div', 'update-log-entry');
+      item.innerHTML = `<div class="update-log-date">${entry.date}</div>` +
+        `<div class="update-log-title">${escapeHtml(entry.title)}</div>` +
+        `<ul class="update-item-list">${entry.items.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}</ul>`;
+      updCard.appendChild(item);
+    });
+    wrap.appendChild(updCard);
+  }
 
   wrap.appendChild(collapsibleHeader('log', '지난 발자취', false));
   if (collapsedSections.log) return wrap;
@@ -2737,9 +2784,48 @@ function showOfflineSummary(result) {
   if (!any) wrap.appendChild(el('div', 'dash-summary-row', '<span>큰 변화 없이 조용한 시간이었습니다.</span>'));
   box.appendChild(wrap);
   const okBtn = el('button', 'btn btn-primary result-ok-btn', '확인');
-  okBtn.addEventListener('click', () => hideModal('eventModal'));
+  okBtn.addEventListener('click', () => { hideModal('eventModal'); checkForUpdateNotice(); });
   box.appendChild(okBtn);
   showModal('eventModal');
+}
+
+/* ===================== 업데이트 소식 ===================== */
+/* 서버·계정 시스템이 없는 정적 웹앱이라 실제 푸시 알림은 보낼 수 없다 — 대신 플레이어가
+   다음에 게임을 열었을 때 "이전에 못 본 최신 업데이트 내역"을 한 번 보여주는 방식으로
+   갈음한다(오너 지시: "업데이트 후 플레이어들에게 업데이트 보고를 간단히 알림문으로").
+   새로 배포할 때마다 이 배열 맨 앞에 항목 하나만 추가하면 되고, 버전 판정은 배열 길이를
+   그대로 쓴다. 처음 시작하는 플레이어(isFirstEverLaunch)에게는 비교 대상이 없으므로
+   띄우지 않는다 — 인트로 화면이 그 역할을 대신한다. */
+const UPDATE_LOG = [
+  { date: '2026-08-31', title: '베타 피드백 반영 업데이트', items: [
+    '팝업 선택지 오조작 방지 — 선택하면 표시만 되고, 확정 버튼을 눌러야 실행됩니다',
+    '초반 담임목사 사례비 부담을 줄였습니다',
+    '시간속도를 15초/주로 더 빠르게 했습니다',
+    '이벤트가 조금 더 자주 발생하도록 조정했습니다',
+    '사역자를 내보낼 때 확인창이 뜨도록 했습니다',
+  ] },
+];
+const UPDATE_SEEN_KEY = 'church-tycoon-update-seen-v1';
+
+function checkForUpdateNotice() {
+  if (isFirstEverLaunch || !UPDATE_LOG.length) return;
+  let seen = 0;
+  try { seen = parseInt(localStorage.getItem(UPDATE_SEEN_KEY) || '0', 10) || 0; } catch (e) { /* ignore */ }
+  if (seen >= UPDATE_LOG.length) return;
+  showUpdateNotice(UPDATE_LOG[0]);
+  try { localStorage.setItem(UPDATE_SEEN_KEY, String(UPDATE_LOG.length)); } catch (e) { /* ignore */ }
+}
+
+function showUpdateNotice(entry) {
+  document.getElementById('updateTitle').textContent = `업데이트 소식 (${entry.date})`;
+  document.getElementById('updateSubtitle').textContent = entry.title;
+  document.getElementById('updateItems').innerHTML = entry.items.map((t) => `<li>${escapeHtml(t)}</li>`).join('');
+  showModal('updateModal');
+}
+
+function initUpdateNotice() {
+  const btn = document.getElementById('updateCloseBtn');
+  if (btn) btn.addEventListener('click', () => hideModal('updateModal'));
 }
 
 /* ===================== 탭 보너스 ===================== */
@@ -2908,7 +2994,9 @@ function startGamePlay() {
   const off = applyOfflineProgress();
   if (off) {
     render();
-    showOfflineSummary(off);
+    showOfflineSummary(off); // 이 모달의 확인 버튼이 닫힌 뒤 checkForUpdateNotice()로 이어진다
+  } else {
+    checkForUpdateNotice();
   }
 }
 
@@ -2941,6 +3029,7 @@ function init() {
   initChurchNameInput();
   initMilestoneModal();
   initIntro();
+  initUpdateNotice();
   initScene();
   initPwa();
   initSplash();
