@@ -1765,6 +1765,7 @@ function actionSaveToSlot(n) {
   try {
     localStorage.setItem(SAVE_SLOT_KEYS[n], JSON.stringify(state));
     addLog(`지금 진행 상황을 저장슬롯${n}에 저장했습니다.`);
+    flashSaveIndicator(); // 슬롯1 저장(saveGame)과 달리 이 경로엔 없었던 저장 표시 깜빡임을 맞춰줌(주간 자체점검 2회차)
   } catch (e) { /* storage unavailable */ }
   render();
 }
@@ -2331,7 +2332,10 @@ function renderStaff() {
     const hired = state.staffHired[key];
     const unlocked = state.members >= def.unlockMembers;
 
-    if (!unlocked) {
+    /* 이미 청빙된 사역자는 그 뒤 성도수가 이탈로 unlockMembers 밑으로 내려가도 계속
+       보여야 한다 — 그렇지 않으면 카드가 "잠김"으로 바뀌어 내보내기도 못 하는 상태가
+       된다(주간 자체점검 2회차에서 발견). 잠금 조건은 "아직 청빙 전"일 때만 검사한다. */
+    if (!unlocked && !hired) {
       const card = el('div', 'card');
       card.innerHTML = `
         <div class="card-row">
@@ -2797,6 +2801,10 @@ function showOfflineSummary(result) {
    그대로 쓴다. 처음 시작하는 플레이어(isFirstEverLaunch)에게는 비교 대상이 없으므로
    띄우지 않는다 — 인트로 화면이 그 역할을 대신한다. */
 const UPDATE_LOG = [
+  { date: '2026-08-31', title: '주간 자체점검 2회차', items: [
+    '이미 청빙한 사역자가 성도수가 줄어도 화면에서 사라지지 않도록 고쳤습니다',
+    '저장슬롯 2·3에 저장할 때도 저장 표시가 뜨도록 맞췄습니다',
+  ] },
   { date: '2026-08-31', title: '베타 피드백 반영 업데이트', items: [
     '팝업 선택지 오조작 방지 — 선택하면 표시만 되고, 확정 버튼을 눌러야 실행됩니다',
     '초반 담임목사 사례비 부담을 줄였습니다',
