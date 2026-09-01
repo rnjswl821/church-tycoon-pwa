@@ -1,9 +1,13 @@
 """
 픽셀아트 스프라이트 생성기 — 순수 절차적 드로잉(외부 이미지·폰트 미사용, 라이선스 이슈 없음).
-캔버스를 작게(네이티브 픽셀 해상도) 그린 뒤 그대로 PNG로 저장한다. 브라우저에서는
-image-rendering: pixelated 로 확대 표시해 또렷한 픽셀아트 느낌을 유지한다.
+건물·씬 타일·인물은 지금까지처럼 작은 네이티브 해상도로 그려 image-rendering: pixelated로
+또렷하게 표시한다. 아이콘(스탯바·카드·모달 등 20x20 단색 실루엣 세트)은 오너가 "도형을
+2차원적으로 조합한 느낌이 싫다"고 지적해(2026-09-02), 좌표는 그대로 20x20 설계 그리드를
+쓰되 내부적으로 6배 해상도로 그린 뒤 40x40으로 축소(LANCZOS)해 가장자리를 매끈하게 만들고,
+위쪽은 밝고 아래쪽은 살짝 어두운 그라데이션을 얹어 옅은 입체감을 준다 — 기존 117개 아이콘
+함수는 좌표를 하나도 안 바꿔도 되도록 ImageDraw를 감싸는 프록시(_ScaledDraw)로 처리한다.
 """
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 import os
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets")
@@ -19,6 +23,88 @@ def save(im, name):
 def outline_rect(d, x0, y0, x1, y1, fill, edge, ew=1):
     d.rectangle([x0, y0, x1, y1], fill=fill)
     d.rectangle([x0, y0, x1, y1], outline=edge, width=ew)
+
+# ---------------------------------------------------------------- 아이콘 전용 슈퍼샘플링
+# mi()로 그리는 모든 아이콘(스탯바·카드·모달 등)에만 적용 — 건물·씬 타일·인물은 그대로 둔다.
+ICON_RENDER_SCALE = 6   # 20x20 설계 좌표를 내부적으로 몇 배 해상도로 그릴지
+ICON_OUTPUT_SIZE = 40   # 최종 저장 크기(예전 20x20의 2배 — 더 정교한 디테일이 들어갈 자리)
+
+class _ScaledDraw:
+    """기존 117개 아이콘 함수가 쓰는 d.polygon/rectangle/... 호출을 그대로 받아 좌표만
+    scale배로 늘려 실제 ImageDraw에 넘긴다 — 아이콘 함수 쪽 코드는 한 줄도 안 바꿔도 된다."""
+    def __init__(self, real, scale):
+        self._d = real
+        self._s = scale
+
+    def _pts(self, seq):
+        s = self._s
+        if seq and isinstance(seq[0], (int, float)):
+            return [c * s for c in seq]
+        return [(p[0] * s, p[1] * s) for p in seq]
+
+    def polygon(self, xy, **kw):
+        self._d.polygon(self._pts(xy), **kw)
+
+    def rectangle(self, xy, **kw):
+        kw = dict(kw)
+        if 'width' in kw:
+            kw['width'] = max(1, round(kw['width'] * self._s))
+        self._d.rectangle(self._pts(xy), **kw)
+
+    def rounded_rectangle(self, xy, radius=0, **kw):
+        self._d.rounded_rectangle(self._pts(xy), radius=radius * self._s, **kw)
+
+    def ellipse(self, xy, **kw):
+        self._d.ellipse(self._pts(xy), **kw)
+
+    def line(self, xy, **kw):
+        kw = dict(kw)
+        kw['width'] = max(1, round(kw.get('width', 1) * self._s))
+        self._d.line(self._pts(xy), **kw)
+
+    def arc(self, xy, start, end, **kw):
+        kw = dict(kw)
+        if 'width' in kw:
+            kw['width'] = max(1, round(kw['width'] * self._s))
+        self._d.arc(self._pts(xy), start, end, **kw)
+
+    def chord(self, xy, start, end, **kw):
+        self._d.chord(self._pts(xy), start, end, **kw)
+
+    def pieslice(self, xy, start, end, **kw):
+        self._d.pieslice(self._pts(xy), start, end, **kw)
+
+    def point(self, xy, **kw):
+        s = self._s
+        fill = kw.get('fill')
+        pts = xy if (xy and isinstance(xy[0], (tuple, list))) else [xy]
+        for (x, y) in pts:
+            sx, sy = x * s, y * s
+            self._d.rectangle([sx, sy, sx + s - 1, sy + s - 1], fill=fill)
+
+def mi():
+    """아이콘 전용 캔버스 — 좌표는 그대로 20x20 설계 그리드를 쓰지만, 내부적으로는
+    ICON_RENDER_SCALE배 해상도로 그려진다(_polish에서 축소+음영 처리)."""
+    s = ICON_RENDER_SCALE
+    canvas = img(20 * s, 20 * s)
+    return 20, 20, canvas, _ScaledDraw(ImageDraw.Draw(canvas), s)
+
+def _polish(im, target=ICON_OUTPUT_SIZE):
+    """슈퍼샘플 캔버스를 매끈하게 축소하고, 위는 밝고 아래는 옅게 어두운 그라데이션을
+    얹어 평면적인 단색 실루엣에 옅은 입체감을 더한다(투명 영역은 알파값 그대로 유지)."""
+    small = im.resize((target, target), Image.LANCZOS)
+    w, h = small.size
+    shade = Image.new("L", (w, h))
+    px = shade.load()
+    for y in range(h):
+        val = int(255 * (1.0 - 0.20 * (y / max(1, h - 1))))
+        for x in range(w):
+            px[x, y] = val
+    r, g, b, a = small.split()
+    r = ImageChops.multiply(r, shade)
+    g = ImageChops.multiply(g, shade)
+    b = ImageChops.multiply(b, shade)
+    return Image.merge("RGBA", (r, g, b, a))
 
 # ---------------------------------------------------------------- palette
 INK      = (58, 42, 34, 255)     # soft dark brown outline
@@ -694,9 +780,7 @@ def person(idx):
 # ---------------------------------------------------------------- stat icons
 def icon_fund():
     """섬김기금 — 헌금 주머니"""
-    W, H = 20, 20
-    im = img(W, H)
-    d = ImageDraw.Draw(im)
+    W, H, im, d = mi()
     d.polygon([(4, 9), (16, 9), (17, 18), (3, 18)], fill=GOLD, outline=INK)
     d.arc([5, 3, 15, 13], 200, 340, fill=INK, width=2)
     d.ellipse([3, 6, 17, 12], fill=(224, 176, 90, 255), outline=INK)
@@ -706,9 +790,7 @@ def icon_fund():
 
 def icon_members():
     """성도수 — 두 사람"""
-    W, H = 20, 20
-    im = img(W, H)
-    d = ImageDraw.Draw(im)
+    W, H, im, d = mi()
     d.ellipse([2, 5, 10, 13], fill=(224, 122, 95, 255), outline=INK)
     d.rectangle([1, 12, 11, 18], fill=(224, 122, 95, 255), outline=INK)
     d.ellipse([10, 3, 18, 11], fill=(97, 144, 178, 255), outline=INK)
@@ -717,9 +799,7 @@ def icon_members():
 
 def icon_faith():
     """신앙지수 — 십자가"""
-    W, H = 20, 20
-    im = img(W, H)
-    d = ImageDraw.Draw(im)
+    W, H, im, d = mi()
     for (x, y) in [(3, 3), (17, 3), (3, 17), (17, 17)]:
         d.line([(10, 10), (x, y)], fill=(255, 224, 150, 180), width=2)
     d.rectangle([8, 2, 12, 18], fill=(253, 250, 240, 255), outline=INK)
@@ -728,9 +808,7 @@ def icon_faith():
 
 def icon_reputation():
     """지역신뢰 — 하트"""
-    W, H = 20, 20
-    im = img(W, H)
-    d = ImageDraw.Draw(im)
+    W, H, im, d = mi()
     d.pieslice([2, 3, 11, 12], 180, 360, fill=(224, 122, 149, 255), outline=INK)
     d.pieslice([9, 3, 18, 12], 180, 360, fill=(224, 122, 149, 255), outline=INK)
     d.polygon([(3, 9), (17, 9), (10, 18)], fill=(224, 122, 149, 255), outline=INK)
@@ -739,9 +817,7 @@ def icon_reputation():
 
 def icon_volunteers():
     """봉사자 — 돕는 손"""
-    W, H = 20, 20
-    im = img(W, H)
-    d = ImageDraw.Draw(im)
+    W, H, im, d = mi()
     d.rectangle([7, 10, 14, 18], fill=(244, 201, 155, 255), outline=INK)
     for i, fx in enumerate([6, 9, 12, 15]):
         d.rectangle([fx, 2 + (i % 2), fx + 2, 11], fill=(244, 201, 155, 255), outline=INK)
@@ -1367,14 +1443,14 @@ if __name__ == "__main__":
         save(person(i), f"person_{i}.png")
     for i in range(3):
         save(visiting_car(i), f"visiting_car_{i}.png")
-    save(icon_fund(), "icon_fund.png")
-    save(icon_members(), "icon_members.png")
-    save(icon_faith(), "icon_faith.png")
-    save(icon_reputation(), "icon_reputation.png")
-    save(icon_volunteers(), "icon_volunteers.png")
+    save(_polish(icon_fund()), "icon_fund.png")
+    save(_polish(icon_members()), "icon_members.png")
+    save(_polish(icon_faith()), "icon_faith.png")
+    save(_polish(icon_reputation()), "icon_reputation.png")
+    save(_polish(icon_volunteers()), "icon_volunteers.png")
 
     for name, fn in MISC_ICONS.items():
-        save(fn(), f"micon_{name}.png")
+        save(_polish(fn()), f"micon_{name}.png")
 
     ROOT = os.path.join(os.path.dirname(__file__), "..")
     for size in (192, 512):
