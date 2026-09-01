@@ -1397,7 +1397,14 @@ function advanceWeek() {
   const s = state;
   const mod = computeModifiers(s);
   const sanctuaryCap = BUILDINGS.sanctuary.levels[s.buildings.sanctuary].cap;
-  const neglected = s.week > 3 && isNeglected(s);
+  /* "방치" 판정을 3주(week>3)로 잡아뒀던 게, 갓 개척해서 담임목사 한 명뿐인 게 지극히
+     정상인 시기를 "방치"로 몰아 소득의 150%에 달하는 관리비 누수+신앙·신뢰 급락+성도
+     유입 완전 차단까지 한꺼번에 때리고 있었다(오너가 발견한 실제 오류: "개척하고 담임
+     하나뿐인데 이게 어떻게 방치야"). "아직 세울 시간이 없었다"와 "세울 기회가 있었는데도
+     안 세웠다"를 구분해야 하므로, 개척 후 만 1년(churchAgeYears>=1)이 지나도록 사역·부서·
+     사역자·직분자가 하나도 없을 때만 방치로 본다 — 언제나 조건 없이 켤 수 있는 성경공부
+     (bible_study) 하나 켜는 데 1년이면 충분한 시간이다. */
+  const neglected = churchAgeYears(s) >= 1 && isNeglected(s);
 
   const offerRate = 8000 + s.faith * 120;
   const income = Math.round(s.members * offerRate);
@@ -2921,6 +2928,10 @@ function showOfflineSummary(result) {
    그대로 쓴다. 처음 시작하는 플레이어(isFirstEverLaunch)에게는 비교 대상이 없으므로
    띄우지 않는다 — 인트로 화면이 그 역할을 대신한다. */
 const UPDATE_LOG = [
+  { date: '2026-09-02', title: '갓 개척한 교회를 "방치"로 오판하던 문제 수정', items: [
+    '개척 직후 담임목사 혼자뿐인 정상적인 시기를 "방치"로 판정해 소득의 150%를 관리비로 빼가던 버그를 고쳤습니다',
+    '이제 개척 후 만 1년이 지나도록 사역·부서·사역자·직분자가 정말 하나도 없을 때만 방치로 판정합니다',
+  ] },
   { date: '2026-09-02', title: '"이번 달만 긴축 운영한다"가 실제로 동작하도록 수정', items: [
     '이벤트에서 "이번 달만 긴축 운영한다"를 골라도 실제로는 즉시 현금만 주고 끝나던 것을 고쳤습니다',
     '이제 실제로 약 1개월(4주)간 사역·부서·부교역자 유지비가 20% 줄어듭니다',
