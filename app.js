@@ -987,6 +987,54 @@ const EVENTS = [
         apply: (s) => { s.faith = clamp(s.faith - 3, 0, 100); s.memberFrac = Math.max(0, s.memberFrac - 20); s.members = Math.floor(s.memberFrac); return '갈등이 곪아 터지며 적지 않은 성도들이 교회를 떠나고 말았습니다.'; } },
     ],
   },
+  /* 아래 3개는 "사실성과 게임성" 보고서(2026-08-31, 오너 승인)의 권고를 따라 추가했다 —
+     특정 실화를 재현하지 않고, 여러 실제 사례에서 반복되는 "유형"을 익명 상황으로 각색했다.
+     선택지는 기존 원칙대로 정답 없는 트레이드오프로만 구성했다. */
+  {
+    id: 'donor_influence', icon: 'micon_ev_handshake.png', title: '큰 헌금을 해온 성도의 요청',
+    body: '오랫동안 많은 헌금을 해온 한 성도가, 특정 사역의 방향을 자신의 뜻대로 바꿔달라고 조심스럽게 요청해왔습니다.',
+    available: (s) => s.members >= EVENT_TIER_FRUIT,
+    choices: [
+      { label: '원칙대로 당회의 결정을 그대로 따른다고 정중히 답한다',
+        apply: (s) => { s.faith = clamp(s.faith + 3, 0, 100); s.fund -= 200000; return '원칙을 지킨 데 대해 많은 성도들이 신뢰를 보냈지만, 그 성도는 헌금을 줄였습니다.'; } },
+      { label: '의견을 충분히 경청하되, 결정은 기존대로 유지한다',
+        apply: (s) => { s.faith = clamp(s.faith + 1, 0, 100); s.reputation = clamp(s.reputation + 1, 0, 100); return '경청하는 태도에 대체로 무난히 받아들여졌습니다.'; } },
+      { label: '요청을 일부 수용해 방향을 조정한다',
+        apply: (s) => { s.fund += 400000; s.faith = clamp(s.faith - 4, 0, 100); return '그 성도는 만족했지만, 소식을 들은 다른 성도들 사이에 형평성 논란이 일었습니다.'; } },
+      { label: '개인적으로 따로 만나 마음을 나눈다',
+        apply: (s) => { s.fund -= 60000; s.faith = clamp(s.faith + 2, 0, 100); s.reputation = clamp(s.reputation + 1, 0, 100); return '진솔한 대화 끝에 서로의 입장을 이해하게 되었습니다.'; } },
+    ],
+  },
+  {
+    id: 'worship_style_gap', icon: 'micon_ev_chat.png', title: '찬양 스타일을 둘러싼 세대 차이',
+    body: '젊은 성도들은 좀 더 현대적인 찬양을, 어르신 성도들은 익숙한 찬송가를 원합니다. 예배 준비 때마다 조용한 신경전이 반복됩니다.',
+    available: (s) => s.members >= EVENT_TIER_SPROUT,
+    choices: [
+      { label: '두 스타일을 한 예배 안에 섞어보는 절충안을 시도한다',
+        apply: (s) => { s.fund -= 80000; s.faith = clamp(s.faith + 2, 0, 100); return '완벽하진 않았지만 서로를 이해하는 계기가 되었습니다.'; } },
+      { label: '기존 찬송가 중심을 유지한다',
+        apply: (s) => { s.memberFrac = Math.max(0, s.memberFrac - 2); s.members = Math.floor(s.memberFrac); s.faith = clamp(s.faith + 1, 0, 100); return '어르신들은 안도했지만, 청년 몇몇의 발걸음이 뜸해졌습니다.'; } },
+      { label: '세대별로 예배 시간을 나눈다',
+        apply: (s) => { s.fund -= 150000; s.reputation = clamp(s.reputation + 1, 0, 100); return '각자 편한 시간에 예배드릴 수 있게 되었지만, 운영 부담이 늘었습니다.'; } },
+      { label: '다음 세대에 맞춰 현대적인 찬양으로 전환한다',
+        apply: (s) => { s.memberFrac = Math.max(0, s.memberFrac - 3); s.members = Math.floor(s.memberFrac); s.reputation = clamp(s.reputation + 2, 0, 100); return '젊은 세대는 반겼지만, 서운해하며 떠난 어르신들도 있었습니다.'; } },
+    ],
+  },
+  {
+    id: 'teacher_shortage', icon: 'micon_ev_backpack.png', title: '주일학교 교사가 부족합니다',
+    body: '아이들은 꾸준히 늘고 있는데 정작 가르칠 교사가 부족해, 몇 안 되는 교사들이 지쳐가고 있습니다.',
+    available: (s) => s.members >= EVENT_TIER_SPROUT,
+    choices: [
+      { label: '교사 모집 캠페인을 연다',
+        apply: (s) => { s.fund -= 150000; s.volunteerFrac += 2; s.volunteers = Math.floor(s.volunteerFrac); return '새로운 교사 자원자들이 나서주었습니다.'; } },
+      { label: '기존 교사들에게 감사와 격려를 전한다',
+        apply: (s) => { s.fund -= 50000; s.faith = clamp(s.faith + 2, 0, 100); return '작은 격려가 지친 교사들에게 큰 힘이 되었습니다.'; } },
+      { label: '외부 강사를 초빙해 당장의 공백을 메운다',
+        apply: (s) => { s.fund -= 300000; return '비용은 들었지만 즉시 공백이 채워졌습니다.'; } },
+      { label: '당분간 프로그램 규모를 줄인다',
+        apply: (s) => { s.faith = clamp(s.faith - 2, 0, 100); s.memberFrac = Math.max(0, s.memberFrac - 2); s.members = Math.floor(s.memberFrac); return '교사들은 한숨 돌렸지만, 몇몇 가정이 아쉬워하며 다른 교회를 알아보기 시작했습니다.'; } },
+    ],
+  },
 ];
 
 /* 고신총회 헌법 2부 관리표준(제63~84조·제108~109조) 근거 — 권징(재판·시벌) 절차는
@@ -2851,6 +2899,12 @@ function showOfflineSummary(result) {
    그대로 쓴다. 처음 시작하는 플레이어(isFirstEverLaunch)에게는 비교 대상이 없으므로
    띄우지 않는다 — 인트로 화면이 그 역할을 대신한다. */
 const UPDATE_LOG = [
+  { date: '2026-09-01', title: '실제 목회 딜레마 이벤트 3종 추가', items: [
+    '큰 헌금을 해온 성도가 사역 방향에 영향력을 요청하는 이벤트를 추가했습니다',
+    '찬양 스타일을 둘러싼 세대 차이 이벤트를 추가했습니다',
+    '주일학교 교사 부족 이벤트를 추가했습니다',
+    '모두 특정 실화가 아니라 여러 사례에서 반복되는 유형을 익명 상황으로 각색했습니다',
+  ] },
   { date: '2026-09-01', title: '조직 논리 오류 수정 + 행사 반복 사용 허점 차단', items: [
     '전도축제를 반복 클릭해 예배당 정원을 무시하고 성도·재정을 한 번에 불리던 허점을 막았습니다(정원까지만 늘고, 행사마다 재사용 대기 기간이 생겼습니다)',
     '집사가 한 명도 없어도 장로 임직이 먼저 가능했던 순서를 고쳤습니다',
