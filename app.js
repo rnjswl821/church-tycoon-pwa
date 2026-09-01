@@ -173,12 +173,15 @@ function staffWeeklySalary(key, candidate) {
    미만)이면 사기가 떨어져 신앙지수가 조금씩 더 깎이고, 넉넉히(1.0배 초과) 책정하면 아주
    소폭(최대 +0.2/주) 신앙지수에 보탬이 된다 — 다만 상한을 낮게 잡아 "사례비만 올리면
    이긴다"는 식으로 다른 투자를 밀어내는 지배전략이 되지 않도록 했다.
-   기준액 350만원이던 최초 설정은 실측해보니 최저(0.5배·주 403,846원)로 낮춰도 손익분기점이
-   성도 27명이었다(시작 성도는 12명) — 베타테스터 Coony의 "초반에 돈이 너무 부족했다" 피드백의
-   실제 원인이었다. 180만원으로 낮춰 최저 배율 손익분기점을 시작 인원(12명) 근처인 14명으로
-   당겼다 — 기본값(1.0배)은 여전히 27명 안팎이 필요해, "낮춰서 버티기 vs 넉넉히 주고
-   빨리 키우기"라는 선택 자체는 그대로 살아있다. */
-const PASTOR_BASE_MONTHLY_SALARY = 1800000;
+   기준액 350만원 → 180만원으로 한 차례 낮췄었지만, 오너가 실제 플레이한 화면을 보내와
+   보니 그마저도 **기본값(1.0배)으로 시작한 1주차부터 순증감이 이미 마이너스**였다
+   (수입 18만원 - 사례비 42만원 = -23만원, 시작 성도 12명 기준). 무엇 하나 건드리지 않은
+   채로 첫 화면부터 적자로 시작하는 건 "신중한 선택"이 아니라 그냥 나쁜 첫인상이다.
+   70만원으로 다시 낮춰 기본값(1.0배)이 시작 성도 12명 기준으로 이미 흑자(주 +2만원
+   안팎)가 되도록 했다 — 최저(0.5배)는 성도 5명이면 충분해 사실상 항상 안전하고,
+   최고(2.0배)는 성도 21명 안팎이 필요해 "여유 있게 키운 뒤에나 감당할 수 있는 사치"로
+   남아 선택의 의미는 유지된다. */
+const PASTOR_BASE_MONTHLY_SALARY = 700000;
 const PASTOR_SALARY_MIN_MULT = 0.5;
 const PASTOR_SALARY_MAX_MULT = 2.0;
 const PASTOR_SALARY_STEP = 0.1;
@@ -726,7 +729,11 @@ const EVENTS = [
       { label: '전 사역자와 함께 지출을 철저히 점검한다',
         apply: (s) => { s.fund += 400000; s.faith = clamp(s.faith + 1, 0, 100); return '꼼꼼한 점검으로 새는 지출을 크게 줄였습니다.'; } },
       { label: '이번 달만 긴축 운영한다',
-        apply: (s) => { s.fund += 150000; s.reputation = clamp(s.reputation - 1, 0, 100); return '살림은 나아졌지만, 갑작스러운 긴축에 불편해하는 이들도 있었습니다.'; } },
+        apply: (s) => {
+          s.austerityUntilWeek = s.week + AUSTERITY_DURATION_WEEKS;
+          s.reputation = clamp(s.reputation - 1, 0, 100);
+          return `앞으로 ${AUSTERITY_DURATION_WEEKS}주 동안 사역·부서·부교역자 유지비를 20% 줄이기로 했습니다. 갑작스러운 긴축에 불편해하는 이들도 있었습니다.`;
+        } },
       { label: '성도들에게 상황을 투명하게 공유한다',
         apply: (s) => { s.fund -= 30000; s.faith = clamp(s.faith + 1, 0, 100); s.reputation = clamp(s.reputation + 1, 0, 100); return '자료를 준비하는 비용이 들었지만, 투명한 소통이 신뢰를 더했습니다.'; } },
       { label: '일단 지켜보기로 한다',
@@ -1184,6 +1191,7 @@ function newGame(name) {
     candidateSeed: Math.floor(Math.random() * 1000000000), // 이 판에서 부교역자 후보들이 어떤 사람으로 나올지 결정하는 무작위 시드
     campaignHistory: [],
     campaignLastUsedWeek: {}, // { 행사키: 마지막으로 쓴 주차 } — 행사 쿨다운 계산용
+    austerityUntilWeek: 0, // "이번 달만 긴축 운영한다" 선택 시 이 주차까지 유지비 20% 절감
     pastoralDirections: {}, // { 항목키: 선택한 옵션키 } — 미설정 항목은 효과 없음
   };
 }
@@ -1214,6 +1222,7 @@ function migrateSave(s) {
   if (typeof s.candidateSeed !== 'number') s.candidateSeed = Math.floor(Math.random() * 1000000000); // 구버전 저장 호환 — 이 판만의 시드를 새로 부여
   if (!Array.isArray(s.campaignHistory)) s.campaignHistory = [];
   if (!s.campaignLastUsedWeek || typeof s.campaignLastUsedWeek !== 'object') s.campaignLastUsedWeek = {};
+  if (typeof s.austerityUntilWeek !== 'number') s.austerityUntilWeek = 0;
   if (!s.pastoralDirections || typeof s.pastoralDirections !== 'object') s.pastoralDirections = {};
   if (typeof s.financialCrisisWeeks !== 'number') s.financialCrisisWeeks = 0;
   if (!s.tierReached) s.tierReached = 'seed';
@@ -1339,27 +1348,40 @@ function computeModifiers(s) {
   return mod;
 }
 
+/* "이번 달만 긴축 운영한다"(tight_finances 이벤트) 선택의 실제 효과 — 예전엔 이름만
+   "이번 달 긴축"이지 실제로는 그 자리에서 한 번 현금을 얹어주고 끝나는 즉시 효과였다
+   (오너가 발견한 실제 오류: "선택하면 실제로 1개월간 긴축 운영이 적용되어야지"). 이제
+   실제로 약 1개월(WEEKS_PER_MONTH≈4.3주 반올림)간 사역·부서·부교역자 유지비를
+   20% 줄여주는 지속 효과로 바꿨다(담임목사 사례비는 플레이어가 이미 직접 조절할 수 있는
+   별도 레버라 긴축 대상에서 뺐다). */
+const AUSTERITY_DURATION_WEEKS = Math.round(WEEKS_PER_MONTH);
+const AUSTERITY_CUT_RATE = 0.2;
+
 function computeUpkeep(s) {
   let total = pastorWeeklySalary(s);
-  for (const key in STAFF) if (s.staffHired[key]) total += staffWeeklySalary(key, s.staffHired[key]);
-  for (const key in MINISTRIES) if (s.ministriesActive[key]) total += MINISTRIES[key].upkeep;
-  for (const key in DEPARTMENTS) if (s.departmentsActive[key]) total += DEPARTMENTS[key].upkeep;
-  return total;
+  let variable = 0;
+  for (const key in STAFF) if (s.staffHired[key]) variable += staffWeeklySalary(key, s.staffHired[key]);
+  for (const key in MINISTRIES) if (s.ministriesActive[key]) variable += MINISTRIES[key].upkeep;
+  for (const key in DEPARTMENTS) if (s.departmentsActive[key]) variable += DEPARTMENTS[key].upkeep;
+  if (s.austerityUntilWeek && s.week < s.austerityUntilWeek) variable = Math.round(variable * (1 - AUSTERITY_CUT_RATE));
+  return total + variable;
 }
 
 /* 지출도 종류별로 나눠 보여준다(오너 지시) — 수입 쪽(OFFERING_TYPES)은 가상의 비율 분해였지만
    이쪽은 실제로 이미 나뉘어 있는 항목(담임목사·부교역자·사역·부서)을 그대로 합산해 보여준다. */
 function upkeepBreakdown(s) {
+  const austere = s.austerityUntilWeek && s.week < s.austerityUntilWeek;
+  const cut = (n) => (austere ? Math.round(n * (1 - AUSTERITY_CUT_RATE)) : n);
   const rows = [{ name: '담임목사 사례비', amount: pastorWeeklySalary(s) }];
   let staffTotal = 0;
   for (const key in STAFF) if (s.staffHired[key]) staffTotal += staffWeeklySalary(key, s.staffHired[key]);
-  if (staffTotal > 0) rows.push({ name: '부교역자 사례비', amount: staffTotal });
+  if (staffTotal > 0) rows.push({ name: austere ? '부교역자 사례비(긴축 -20%)' : '부교역자 사례비', amount: cut(staffTotal) });
   let minTotal = 0;
   for (const key in MINISTRIES) if (s.ministriesActive[key]) minTotal += MINISTRIES[key].upkeep;
-  if (minTotal > 0) rows.push({ name: '사역 유지비', amount: minTotal });
+  if (minTotal > 0) rows.push({ name: austere ? '사역 유지비(긴축 -20%)' : '사역 유지비', amount: cut(minTotal) });
   let deptTotal = 0;
   for (const key in DEPARTMENTS) if (s.departmentsActive[key]) deptTotal += DEPARTMENTS[key].upkeep;
-  if (deptTotal > 0) rows.push({ name: '부서 유지비', amount: deptTotal });
+  if (deptTotal > 0) rows.push({ name: austere ? '부서 유지비(긴축 -20%)' : '부서 유지비', amount: cut(deptTotal) });
   return rows;
 }
 
@@ -2899,6 +2921,16 @@ function showOfflineSummary(result) {
    그대로 쓴다. 처음 시작하는 플레이어(isFirstEverLaunch)에게는 비교 대상이 없으므로
    띄우지 않는다 — 인트로 화면이 그 역할을 대신한다. */
 const UPDATE_LOG = [
+  { date: '2026-09-02', title: '"이번 달만 긴축 운영한다"가 실제로 동작하도록 수정', items: [
+    '이벤트에서 "이번 달만 긴축 운영한다"를 골라도 실제로는 즉시 현금만 주고 끝나던 것을 고쳤습니다',
+    '이제 실제로 약 1개월(4주)간 사역·부서·부교역자 유지비가 20% 줄어듭니다',
+    '재정 요약 화면에도 긴축 적용 중인 항목이 표시됩니다',
+  ] },
+  { date: '2026-09-02', title: '담임목사 사례비 재조정 — 1주차부터 적자였던 문제', items: [
+    '기본 설정(1.0배)으로 시작해도 1주차부터 재정이 마이너스였던 문제를 고쳤습니다',
+    '이제 시작 성도 12명 기준으로 기본값이 흑자입니다',
+    '사례비를 낮추거나 올리는 선택의 의미는 그대로 유지됩니다(더 넉넉히 주려면 여전히 교회가 자라야 합니다)',
+  ] },
   { date: '2026-09-01', title: '실제 목회 딜레마 이벤트 3종 추가', items: [
     '큰 헌금을 해온 성도가 사역 방향에 영향력을 요청하는 이벤트를 추가했습니다',
     '찬양 스타일을 둘러싼 세대 차이 이벤트를 추가했습니다',
