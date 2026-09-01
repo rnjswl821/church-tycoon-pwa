@@ -40,6 +40,34 @@ description_meta = '<meta name="description" content="교회를 세우고 성도
 
 sprite_json = json.dumps(sprite_data, ensure_ascii=False)
 
+# app.js/index.html render dozens of plain <img src="assets/xxx.png"> tags via innerHTML
+# (topbar logo, stat icons, every card icon, modal icons, ...). scene.js's canvas loader was
+# the only thing ever patched to use SPRITE_DATA — every one of those plain <img> tags was
+# still pointing at a relative assets/ path that doesn't exist in a single-file artifact, so
+# they all rendered as broken-image boxes (오너가 실제로 발견, 2026-09-01). A MutationObserver
+# catches every <img> added anywhere (however app.js created it) without touching app.js itself.
+img_fix_script = """
+(function(){
+  function fix(img) {
+    var src = img.getAttribute('src');
+    if (src && src.indexOf('assets/') === 0) {
+      var key = src.slice('assets/'.length);
+      if (window.SPRITE_DATA && window.SPRITE_DATA[key]) img.src = window.SPRITE_DATA[key];
+    }
+  }
+  function scan(root) {
+    if (root.tagName === 'IMG') fix(root);
+    if (root.querySelectorAll) root.querySelectorAll('img').forEach(fix);
+  }
+  scan(document);
+  new MutationObserver(function(muts){
+    muts.forEach(function(m){
+      m.addedNodes.forEach(function(n){ if (n.nodeType === 1) scan(n); });
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+})();
+"""
+
 out = f"""<meta charset="UTF-8">
 <title>{title}</title>
 {description_meta}
@@ -55,6 +83,9 @@ out = f"""<meta charset="UTF-8">
 
 <script>
 window.SPRITE_DATA = {sprite_json};
+</script>
+<script>
+{img_fix_script}
 </script>
 <script>
 {scene_js_patched}
