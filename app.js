@@ -189,7 +189,12 @@ function pastorWeeklySalary(s) {
 
 /* ---- 후보자(이력서) 생성 — 시드 기반이라 같은 자리에 새로 후보를 낼 때만 새 사람이 뜬다 ---- */
 const CAND_SURNAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임'];
-const CAND_GIVEN = ['민준', '서연', '도현', '지우', '하은', '성민', '예은', '준영', '수빈', '재현', '은서', '현우', '소율', '민재', '다은', '승우', '유진', '태윤', '채원', '동현'];
+/* 예전엔 성별 구분 없이 하나의 이름 풀에서 뽑아, 성별을 지정한 후보(예: 여전도사·권사)에도
+   남성적인 이름이 나올 수 있었다(자체 점검 2026-09-01 — 오너 지시로 발견). 이름 풀 자체를
+   성별로 나눠 실제 배정된 성별에 맞는 이름만 뽑히도록 했다. */
+const CAND_GIVEN_M = ['민준', '도현', '성민', '준영', '재현', '현우', '민재', '승우', '태윤', '동현'];
+const CAND_GIVEN_F = ['서연', '지우', '하은', '예은', '수빈', '은서', '소율', '다은', '유진', '채원'];
+function pickGivenName(rnd, gender) { const pool = gender === 'F' ? CAND_GIVEN_F : CAND_GIVEN_M; return pool[Math.floor(rnd() * pool.length)]; }
 const CAND_MBTI = ['ISTJ', 'ISFJ', 'INFJ', 'INTJ', 'ISTP', 'ISFP', 'INFP', 'INTP', 'ESTP', 'ESFP', 'ENFP', 'ENTP', 'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ'];
 const CAND_FAMILY = ['미혼', '기혼(자녀 없음)', '기혼(자녀 1명)', '기혼(자녀 2명)', '기혼(자녀 3명)'];
 const CAND_STYLES = ['설교', '심방', '상담', '다음세대교육', '청년사역', '찬양인도', '행정·기획', '전도', '소그룹인도', '제자훈련'];
@@ -208,7 +213,7 @@ function seededRng(seed) {
 function generateCandidate(seed, genderConstraint) {
   const rnd = seededRng(seed);
   const gender = genderConstraint || (rnd() < 0.5 ? 'M' : 'F');
-  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + pickGivenName(rnd, gender);
   const age = 26 + Math.floor(rnd() * 20);
   const mbti = CAND_MBTI[Math.floor(rnd() * CAND_MBTI.length)];
   const family = CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
@@ -248,10 +253,16 @@ function hashStr(s) {
    맞게") — OFFICERS.unlock에서 이미 교회 나이가 등록연한 미만이면 후보 생성 자체를 막으므로
    여기 s는 있을 때만 상한 계산에 쓰고, 없으면 헌법상 최소연한만 반환한다(구버전 저장 표시용). */
 const OFFICER_AGE_RANGE = { elder: [40, 66], deacon: [35, 66], exhorter: [45, 66] };
+/* 헌법상 성별 요건도 그대로 따른다 — 장로(제65조 1항)·집사(제75조 1항)는 "남자 세례교인",
+   권사(제81조 1항)는 "여자 세례교인"으로 명시돼 있다. 예전엔 후보 생성이 성별을 아예
+   따지지 않아, 예를 들어 권사 후보에 남성적인 이름이 나올 수 있었다(자체 점검
+   2026-09-01 — 오너 지시로 발견). */
+const OFFICER_GENDER = { elder: 'M', deacon: 'M', exhorter: 'F' };
 
 function officerDisplayProfile(roleKey, seed, idx, s) {
   const rnd = seededRng(hashStr(`${roleKey}:${seed}:${idx}`));
-  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+  const gender = OFFICER_GENDER[roleKey] || 'M';
+  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + pickGivenName(rnd, gender);
   const [minAge, maxAge] = OFFICER_AGE_RANGE[roleKey] || [40, 66];
   const age = minAge + Math.floor(rnd() * (maxAge - minAge + 1));
   const family = CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
@@ -259,7 +270,7 @@ function officerDisplayProfile(roleKey, seed, idx, s) {
   const cap = s ? Math.min(age - 18, churchAgeYears(s)) : minTenure;
   const maxTenure = Math.max(minTenure, cap);
   const tenureYears = minTenure + Math.floor(rnd() * (maxTenure - minTenure + 1));
-  return { name, age, family, tenureYears };
+  return { name, gender, age, family, tenureYears };
 }
 
 /* 공동의회에 세울 후보 셋 — 같은 주 안에서는 안정적으로 유지되고, 주가 바뀌면 새로 갱신된다. */
@@ -294,7 +305,7 @@ const MEMBER_GIFTS = ['찬양', '봉사', '가르침', '섬김', '기도', '전�
 function generalMemberProfile(i, churchAgeWeeks) {
   const rnd = seededRng(hashStr('genmember:' + i));
   const gender = rnd() < 0.5 ? 'M' : 'F';
-  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + CAND_GIVEN[Math.floor(rnd() * CAND_GIVEN.length)];
+  const name = CAND_SURNAMES[Math.floor(rnd() * CAND_SURNAMES.length)] + pickGivenName(rnd, gender);
   const age = Math.floor(rnd() * 80);
   const family = age < 19 ? '미성년자' : CAND_FAMILY[Math.floor(rnd() * CAND_FAMILY.length)];
   const status = age < 15 ? '유아세례교인' : MEMBER_STATUS[Math.floor(rnd() * MEMBER_STATUS.length)];
@@ -352,12 +363,16 @@ const MINISTRIES = {
     lockDesc: `성도 ${EVENT_TIER_SPROUT}명 이상 + 교육부 조직 필요`,
   },
   youth_ministry: {
+    /* 교육부의 설명문은 "유아부부터 청소년부까지"로 범위를 못박아 두었는데, 청년(대학·청년
+       성인)은 그 범위 밖이다 — 그런데도 청년부 잠금이 교육부 조직을 요구하고 있었다(자체
+       점검 2026-09-01, 오너 지시로 발견). 실제 교회에서도 청년부는 보통 다음세대 교육부와
+       별개 계통(청년회)으로 운영되므로, 교육부 의존을 없앴다. */
     name: '청년부', icon: 'micon_m_youth.png',
     desc: '청년 세대의 신앙과 공동체를 세웁니다.',
     upkeep: 150000,
     effect: { faithPerWeek: 0.6, reputationPerWeek: 0.4 },
-    unlock: (s) => s.members >= 40 && !!s.departmentsActive.education_dept,
-    lockDesc: '성도수 40명 이상 + 교육부 조직 필요',
+    unlock: (s) => s.members >= 40,
+    lockDesc: '성도수 40명 이상 필요',
   },
   diakonia: {
     name: '봉사단', icon: 'micon_m_basket.png',
@@ -400,7 +415,7 @@ const MINISTRIES = {
     lockDesc: `성도 ${EVENT_TIER_FRUIT}명 이상 필요`,
   },
   leadership_school: {
-    name: '지도자훈련(리더십스쿨)', icon: 'micon_m_youth.png',
+    name: '지도자훈련(리더십스쿨)', icon: 'micon_m_leadership.png',
     desc: '장차 직분자·교사로 세워질 이들을 미리 훈련하는 과정입니다.',
     upkeep: 90000,
     effect: { faithPerWeek: 0.4, reputationPerWeek: 0.3 },
@@ -562,19 +577,31 @@ function showPersonalEvent(ref, template) {
   showModal('eventModal');
 }
 
+/* 행사는 예전엔 재정만 있으면 쿨다운 없이 몇 번이고 연달아 쓸 수 있었다(오너가 발견한 실제
+   허점 — "재정이 어느 정도 생기면 전도축제만 반복 클릭해서 성도수·재정을 한꺼번에 불려
+   엔딩까지 금방 갈 수 있다"). 특히 전도축제는 예배당 정원(sanctuaryCap)을 아예 확인하지
+   않고 성도를 더해서, 이 게임의 핵심 성장 원칙("정원이 찰 만큼 모여야 다음 단계로 확장")을
+   건물 업그레이드 없이 우회할 수 있었다. 두 가지로 막았다:
+   ① 전도축제도 다른 성도 유입(advanceWeek의 visitors)과 똑같이 예배당 정원을 넘지 못하게 함
+   ② 행사마다 실제 교회 행사 주기에 맞는 재사용 대기 기간(cooldownWeeks)을 둠 — 실제로도
+      부흥회·전도축제·수련회를 매주 열지는 않는다는 점과도 맞아떨어진다. */
 const CAMPAIGNS = {
   revival: {
     name: '부흥회', icon: 'micon_c_flame.png',
     desc: '집중 은혜의 기간을 마련해 신앙지수를 크게 끌어올립니다.',
-    cost: 5000000,
+    cost: 5000000, cooldownWeeks: 8,
     apply: (s) => { s.faith = clamp(s.faith + 12, 0, 100); return '부흥회로 성도들의 신앙이 뜨거워졌습니다.'; },
   },
   outreach_festival: {
     name: '전도축제', icon: 'micon_c_tentflag.png',
-    desc: '지역 주민을 초청하는 축제입니다. 새가족이 한 번에 여럿 찾아옵니다.',
-    cost: 4000000,
+    desc: '지역 주민을 초청하는 축제입니다. 새가족이 한 번에 여럿 찾아옵니다(예배당 정원까지만).',
+    cost: 4000000, cooldownWeeks: 10,
     apply: (s) => {
-      const n = Math.max(1, Math.round(3 + s.reputation / 12));
+      const cap = BUILDINGS.sanctuary.levels[s.buildings.sanctuary].cap;
+      const roomLeft = Math.max(0, cap - s.members);
+      const want = Math.max(1, Math.round(3 + s.reputation / 12));
+      const n = Math.min(want, roomLeft);
+      if (n <= 0) return '전도축제를 열었지만, 예배당 정원이 이미 가득 차 있어 새가족을 더 받지 못했습니다.';
       s.memberFrac += n; s.members = Math.floor(s.memberFrac);
       return `전도축제로 새가족 ${n}명이 등록했습니다.`;
     },
@@ -582,7 +609,7 @@ const CAMPAIGNS = {
   summer_retreat: {
     name: '여름수련회', icon: 'micon_c_tent.png',
     desc: '함께 떠나는 수련회입니다. 신앙과 공동체 결속이 깊어집니다.',
-    cost: 6000000,
+    cost: 6000000, cooldownWeeks: 16,
     apply: (s) => {
       s.faith = clamp(s.faith + 6, 0, 100);
       s.volunteerFrac += 1; s.volunteers = Math.floor(s.volunteerFrac);
@@ -981,8 +1008,16 @@ const OFFICERS = {
     name: '장로', icon: 'micon_o_elder.png',
     desc: '만 40~66세, 등록 3년 이상 된 세례교인 중 신망 있는 이를 공동의회 2/3 이상 찬성으로 세웁니다. 목사와 함께 당회를 이루어 교회를 돌봅니다(2부 제63~68조). 항존직이라 한번 임직하면 계속 시무합니다.',
     cost: 500000, volCost: 2,
-    unlock: (s) => s.members >= 30 && churchAgeYears(s) >= OFFICER_MIN_TENURE.elder,
-    lockDesc: `세례교인(성도) 30명 이상 + 개척 ${OFFICER_MIN_TENURE.elder}년 이상 필요 — 당회 조직요건(제109조)·등록연한(제65조)`,
+    /* 제109조 원문은 "세례교인 30명 이상"을 당회 조직요건으로 명시하지만, 이 게임은 원입·
+       학습·세례교인을 구분해 따로 집계하지 않는다(교인 구분은 개별 성도 카드 표시용일 뿐).
+       그래서 실제 조건은 세례교인이 아니라 전체 등록교인(s.members) 30명이다 — 이전
+       lockDesc 문구가 "세례교인(성도)"라고 적어 실제 조건과 다르게 읽혔다(자체 점검
+       2026-09-01, 오너 지시로 발견). 문구를 실제 조건에 맞게 정정했다.
+       또한 예전엔 집사가 한 명도 없어도 장로 임직이 먼저 가능했다(오너가 발견한 실제 오류) —
+       살림을 맡을 집사 없이 당회부터 세우는 건 조직 순서상 어색하므로, 집사 1명 이상이
+       이미 임직돼 있어야 장로를 임직할 수 있도록 조건을 추가했다. */
+    unlock: (s) => s.members >= 30 && churchAgeYears(s) >= OFFICER_MIN_TENURE.elder && (s.officers.deacon || []).length >= 1,
+    lockDesc: `등록교인(성도) 30명 이상 + 개척 ${OFFICER_MIN_TENURE.elder}년 이상 + 집사 1명 이상 필요 — 당회 조직요건(제109조 취지)·등록연한(제65조)`,
     perUnitNote: '정착률 +2%p',
   },
   deacon: {
@@ -1100,6 +1135,7 @@ function newGame(name) {
     pastorSalaryMult: 1,
     candidateSeed: Math.floor(Math.random() * 1000000000), // 이 판에서 부교역자 후보들이 어떤 사람으로 나올지 결정하는 무작위 시드
     campaignHistory: [],
+    campaignLastUsedWeek: {}, // { 행사키: 마지막으로 쓴 주차 } — 행사 쿨다운 계산용
     pastoralDirections: {}, // { 항목키: 선택한 옵션키 } — 미설정 항목은 효과 없음
   };
 }
@@ -1129,6 +1165,7 @@ function migrateSave(s) {
   if (typeof s.pastorSalaryMult !== 'number') s.pastorSalaryMult = 1;
   if (typeof s.candidateSeed !== 'number') s.candidateSeed = Math.floor(Math.random() * 1000000000); // 구버전 저장 호환 — 이 판만의 시드를 새로 부여
   if (!Array.isArray(s.campaignHistory)) s.campaignHistory = [];
+  if (!s.campaignLastUsedWeek || typeof s.campaignLastUsedWeek !== 'object') s.campaignLastUsedWeek = {};
   if (!s.pastoralDirections || typeof s.pastoralDirections !== 'object') s.pastoralDirections = {};
   if (typeof s.financialCrisisWeeks !== 'number') s.financialCrisisWeeks = 0;
   if (!s.tierReached) s.tierReached = 'seed';
@@ -1589,15 +1626,25 @@ function actionToggleDepartment(key) {
    또 열지 다른 걸 시도할지 판단할 근거로 삼을 수 있게 한다. */
 const CAMPAIGN_HISTORY_MAX = 50;
 
+function campaignCooldownLeft(key) {
+  const def = CAMPAIGNS[key];
+  const last = (state.campaignLastUsedWeek || {})[key];
+  if (typeof last !== 'number') return 0;
+  return Math.max(0, def.cooldownWeeks - (state.week - last));
+}
+
 function actionCampaign(key) {
   const def = CAMPAIGNS[key];
   if (state.fund < def.cost) return;
+  if (campaignCooldownLeft(key) > 0) return;
   const before = snapshotStats(state);
   state.fund -= def.cost;
   const msg = def.apply(state);
   const after = snapshotStats(state);
   addLog(msg);
   if (!state.campaignHistory) state.campaignHistory = [];
+  if (!state.campaignLastUsedWeek) state.campaignLastUsedWeek = {};
+  state.campaignLastUsedWeek[key] = state.week;
   state.campaignHistory.unshift({
     week: state.week, key, name: def.name, icon: def.icon, msg,
     fundDelta: after.fund - before.fund,
@@ -1961,15 +2008,18 @@ function renderCampaigns() {
     const def = CAMPAIGNS[key];
     const card = el('div', 'card');
     const afford = state.fund >= def.cost;
+    const cooldownLeft = campaignCooldownLeft(key);
+    const disabled = !afford || cooldownLeft > 0;
+    const btnLabel = cooldownLeft > 0 ? `${cooldownLeft}주 후 가능` : fmtWon(def.cost);
     card.innerHTML = `
       <div class="card-row">
         <img class="card-emoji-img" src="assets/${def.icon}" alt="">
         <div class="card-main">
           <div class="card-title">${def.name}</div>
-          <div class="card-sub">${def.desc}</div>
+          <div class="card-sub">${def.desc}${cooldownLeft > 0 ? ` · <span class="card-lock">준비 기간 ${cooldownLeft}주 남음</span>` : ''}</div>
         </div>
         <div class="card-action">
-          <button class="btn btn-outline btn-small" ${afford ? '' : 'disabled'} data-campaign="${key}">${fmtWon(def.cost)}</button>
+          <button class="btn btn-outline btn-small" ${disabled ? 'disabled' : ''} data-campaign="${key}">${btnLabel}</button>
         </div>
       </div>`;
     wrap.appendChild(card);
@@ -2267,7 +2317,7 @@ function renderRoster() {
         <img class="card-emoji-img" src="assets/${OFFICERS[key].icon}" alt="">
         <div class="card-main">
           <div class="card-title">${officerNames[key]} <span class="card-level">${list.length}명</span></div>
-          <div class="card-sub">공동의회 투표·노회 고시를 거쳐 임직한 직분자입니다(임기 정년까지).</div>
+          <div class="card-sub">공동의회 투표·노회 고시를 거쳐 임직한 직분자입니다(항존직이라 계속 시무합니다).</div>
         </div>
       </div>`;
     wrap.appendChild(card);
@@ -2801,6 +2851,13 @@ function showOfflineSummary(result) {
    그대로 쓴다. 처음 시작하는 플레이어(isFirstEverLaunch)에게는 비교 대상이 없으므로
    띄우지 않는다 — 인트로 화면이 그 역할을 대신한다. */
 const UPDATE_LOG = [
+  { date: '2026-09-01', title: '조직 논리 오류 수정 + 행사 반복 사용 허점 차단', items: [
+    '전도축제를 반복 클릭해 예배당 정원을 무시하고 성도·재정을 한 번에 불리던 허점을 막았습니다(정원까지만 늘고, 행사마다 재사용 대기 기간이 생겼습니다)',
+    '집사가 한 명도 없어도 장로 임직이 먼저 가능했던 순서를 고쳤습니다',
+    '장로·집사·권사 후보 이름이 헌법상 성별 조건과 맞지 않게 나오던 문제를 고쳤습니다',
+    '청년부가 다음세대 교육부서(교육부) 조직을 잘못 전제조건으로 요구하던 것을 없앴습니다',
+    '지도자훈련(리더십스쿨)이 청년부와 같은 아이콘을 쓰던 것을 새 아이콘으로 구분했습니다',
+  ] },
   { date: '2026-08-31', title: '주간 자체점검 2회차', items: [
     '이미 청빙한 사역자가 성도수가 줄어도 화면에서 사라지지 않도록 고쳤습니다',
     '저장슬롯 2·3에 저장할 때도 저장 표시가 뜨도록 맞췄습니다',

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'church-tycoon-v26';
+const CACHE_NAME = 'church-tycoon-v27';
 const ASSETS = [
   './',
   './index.html',
@@ -34,7 +34,8 @@ const ASSETS = [
   './assets/micon_m_basket.png', './assets/micon_m_bible.png', './assets/micon_m_dawn.png',
   './assets/micon_m_elementary.png', './assets/micon_m_house.png', './assets/micon_m_infant.png',
   './assets/micon_m_notebook.png', './assets/micon_m_notepad.png', './assets/micon_m_sfc.png',
-  './assets/micon_m_water.png', './assets/micon_m_youth.png', './assets/micon_o_deacon.png',
+  './assets/micon_m_water.png', './assets/micon_m_youth.png', './assets/micon_m_leadership.png',
+  './assets/micon_o_deacon.png',
   './assets/micon_o_elder.png', './assets/micon_o_exhorter.png', './assets/micon_s_evangelist_f.png',
   './assets/micon_s_pastor.png', './assets/micon_s_scroll.png', './assets/micon_s_teacher.png',
   './assets/micon_ui_check.png', './assets/micon_ui_clipboard.png', './assets/micon_ui_floppy.png',

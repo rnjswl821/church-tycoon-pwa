@@ -873,6 +873,14 @@ def micon_m_youth():
     d.ellipse([14, 13, 17, 16], fill=GOLD, outline=INK)
     return im
 
+def micon_m_leadership():
+    # 지도자훈련(리더십스쿨) 전용 아이콘 — 예전엔 청년부(m_youth)와 같은 아이콘을 재사용하고
+    # 있었다(자체 점검 2026-09-01, 오너 지시로 발견). 방패+별 모양으로 구분되게 새로 그렸다.
+    W, H, im, d = mi()
+    d.polygon([(10, 2), (17, 5), (17, 11), (10, 18), (3, 11), (3, 5)], fill=(90, 110, 150, 255), outline=INK)
+    d.polygon([(10, 5), (11.4, 8.6), (15, 9), (12.2, 11.4), (13, 15), (10, 12.8), (7, 15), (7.8, 11.4), (5, 9), (8.6, 8.6)], fill=GOLD, outline=INK)
+    return im
+
 def micon_m_basket():
     W, H, im, d = mi()
     d.polygon([(3, 9), (17, 9), (15, 18), (5, 18)], fill=WOOD, outline=INK)
@@ -1302,6 +1310,7 @@ MISC_ICONS = {
     's_scroll': micon_s_scroll, 's_pastor': micon_s_pastor,
     'm_dawn': micon_m_dawn, 'm_house': micon_m_house, 'm_infant': micon_m_infant,
     'm_elementary': micon_m_elementary, 'm_sfc': micon_m_sfc, 'm_youth': micon_m_youth,
+    'm_leadership': micon_m_leadership,
     'm_basket': micon_m_basket, 'm_bible': micon_m_bible, 'm_notepad': micon_m_notepad,
     'm_water': micon_m_water, 'm_notebook': micon_m_notebook,
     'd_mens': micon_d_mens, 'd_womens': micon_d_womens, 'd_mic': micon_d_mic, 'd_school': micon_d_school,
